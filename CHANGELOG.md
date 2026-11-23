@@ -10,6 +10,8 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-23
+
 ### Added
 - Imágenes en la vista previa (rutas relativas al documento; `png`, `jpg`, `gif`, `webp`, `bmp` y `svg`). Las remotas o inexistentes muestran un aviso en su lugar [US-4.4]
 - Pegar una imagen del portapapeles con `Ctrl/Cmd+V` en el editor: se guarda en `assets/AAAAMMDD-N.png` junto al documento y se inserta `![](assets/…)` [US-4.4]
@@ -65,7 +67,8 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 - Ventana principal «Mdx» con explorador, editor y vista previa (20/40/40), divisores arrastrables y barra de estado [US-0.2]
 - Especificación inicial: PRD, DATA, ARCHITECTURE, STACK, CHECKLIST y CLAUDE.md.
 
-[Unreleased]: https://github.com/OWNER/mdx/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/OWNER/mdx/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/OWNER/mdx/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/OWNER/mdx/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/OWNER/mdx/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/OWNER/mdx/releases/tag/v0.2.0

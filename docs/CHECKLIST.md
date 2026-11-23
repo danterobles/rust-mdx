@@ -156,7 +156,7 @@
 ### US-4.5 Zoom
 - [x] AC1 Ctrl/Cmd +/-/0 👁
 
-- [ ] **Hito F4**: app usable a diario con config personalizada 👁
+- [~] **Hito F4**: app usable a diario con config personalizada 👁 (cada historia US-4.1…4.5 verificada a mano por el propietario; el uso diario con una configuración propia queda pendiente)
 
 ## Fase 5 — Distribución → v1.0.0
 
