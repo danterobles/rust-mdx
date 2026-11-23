@@ -1,6 +1,6 @@
 //! Mapeo tecla → acción. `Ctrl` en Windows/Linux, `Cmd` en macOS (vía `Modifiers::command`).
 
-use iced::keyboard::key::Physical;
+use iced::keyboard::key::{Code, Named, Physical};
 use iced::keyboard::{Key, Modifiers};
 
 /// Acciones disparadas por atajos de teclado.
@@ -14,6 +14,38 @@ pub enum ShortcutAction {
     Undo,
     Redo,
     TogglePreview,
+    CloseTab,
+    NextTab,
+    PrevTab,
+    /// Salta a la pestaña `n` (1..=9).
+    GoToTab(usize),
+}
+
+/// Dígito 1..=9 de la tecla (fila numérica o teclado numérico).
+fn digit(key: &Key, physical: Physical) -> Option<usize> {
+    if let Key::Character(c) = key
+        && let Some(d) = c.chars().next().and_then(|c| c.to_digit(10))
+        && c.chars().count() == 1
+        && (1..=9).contains(&d)
+    {
+        return usize::try_from(d).ok();
+    }
+    let Physical::Code(code) = physical else {
+        return None;
+    };
+    let n = match code {
+        Code::Digit1 | Code::Numpad1 => 1,
+        Code::Digit2 | Code::Numpad2 => 2,
+        Code::Digit3 | Code::Numpad3 => 3,
+        Code::Digit4 | Code::Numpad4 => 4,
+        Code::Digit5 | Code::Numpad5 => 5,
+        Code::Digit6 | Code::Numpad6 => 6,
+        Code::Digit7 | Code::Numpad7 => 7,
+        Code::Digit8 | Code::Numpad8 => 8,
+        Code::Digit9 | Code::Numpad9 => 9,
+        _ => return None,
+    };
+    Some(n)
 }
 
 /// Traduce una pulsación a una acción, si corresponde.
@@ -29,8 +61,21 @@ pub fn map(key: &Key, physical: Physical, modifiers: Modifiers) -> Option<Shortc
     {
         return Some(ShortcutAction::TogglePreview);
     }
+    // Ctrl+Tab / Ctrl+Shift+Tab (también en macOS, donde es Control y no Cmd).
+    if modifiers.control() && !modifiers.alt() && matches!(key, Key::Named(Named::Tab)) {
+        return Some(if modifiers.shift() {
+            ShortcutAction::PrevTab
+        } else {
+            ShortcutAction::NextTab
+        });
+    }
     if !modifiers.command() || modifiers.alt() {
         return None;
+    }
+    if !modifiers.shift()
+        && let Some(n) = digit(key, physical)
+    {
+        return Some(ShortcutAction::GoToTab(n));
     }
     let letter = key.to_latin(physical)?;
     match (letter.to_ascii_lowercase(), modifiers.shift()) {
@@ -39,6 +84,7 @@ pub fn map(key: &Key, physical: Physical, modifiers: Modifiers) -> Option<Shortc
         ('o', true) => Some(ShortcutAction::OpenFolder),
         ('s', false) => Some(ShortcutAction::Save),
         ('s', true) => Some(ShortcutAction::SaveAs),
+        ('w', false) => Some(ShortcutAction::CloseTab),
         ('z', false) => Some(ShortcutAction::Undo),
         ('z', true) => Some(ShortcutAction::Redo),
         // Ctrl+Y rehace en Windows/Linux (en macOS es Cmd+Shift+Z).
@@ -97,6 +143,40 @@ mod tests {
             Some(ShortcutAction::TogglePreview)
         );
         assert_eq!(press("\\", Code::Backslash, Modifiers::empty()), None);
+    }
+
+    #[test]
+    fn maps_tab_shortcuts() {
+        let cmd = Modifiers::COMMAND;
+        assert_eq!(press("w", Code::KeyW, cmd), Some(ShortcutAction::CloseTab));
+        assert_eq!(
+            press("1", Code::Digit1, cmd),
+            Some(ShortcutAction::GoToTab(1))
+        );
+        assert_eq!(
+            press("9", Code::Digit9, cmd),
+            Some(ShortcutAction::GoToTab(9))
+        );
+        assert_eq!(press("0", Code::Digit0, cmd), None);
+        // Teclado donde la fila numérica exige Shift: la tecla física sigue valiendo.
+        assert_eq!(
+            press("&", Code::Digit1, cmd),
+            Some(ShortcutAction::GoToTab(1))
+        );
+        let tab = Key::Named(Named::Tab);
+        let ctrl = Modifiers::CTRL;
+        assert_eq!(
+            map(&tab, Physical::Code(Code::Tab), ctrl),
+            Some(ShortcutAction::NextTab)
+        );
+        assert_eq!(
+            map(&tab, Physical::Code(Code::Tab), ctrl | Modifiers::SHIFT),
+            Some(ShortcutAction::PrevTab)
+        );
+        assert_eq!(
+            map(&tab, Physical::Code(Code::Tab), Modifiers::empty()),
+            None
+        );
     }
 
     #[test]

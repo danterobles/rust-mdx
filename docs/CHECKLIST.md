@@ -107,9 +107,9 @@
 ## Fase 3 — Productividad → v0.4.0
 
 ### US-3.1 Pestañas
-- [ ] AC1 Ctrl/Cmd+W con diálogo 👁
-- [ ] AC2 Ctrl+Tab y Ctrl/Cmd+1..9 👁
-- [ ] AC3 `●` y tooltip 👁
+- [x] AC1 Ctrl/Cmd+W con diálogo 👁
+- [x] AC2 Ctrl+Tab y Ctrl/Cmd+1..9 👁
+- [x] AC3 `●` y tooltip 👁
 
 ### US-3.2 Outline
 - [ ] AC1 Lista H1–H6 indentada 👁

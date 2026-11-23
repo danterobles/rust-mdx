@@ -80,7 +80,13 @@ flowchart LR
 ```
 mdx-app/src/
 ├── main.rs          # init de tracing, parseo CLI, arranque iced
-├── app.rs           # State, Message, update, view, subscription (orquestador)
+├── app/             # State, Message, update, view, subscription (orquestador, ver ADR 0006)
+│   ├── mod.rs       # tipos, update, view, barra de pestañas
+│   ├── documents.rs # documento activo + aparcados, abrir/cerrar/cambiar pestaña
+│   ├── editing.rs   # edición, deshacer, guardado
+│   ├── disk.rs      # watcher, cambios externos, conflictos
+│   ├── explorer_ops.rs # árbol, menú contextual, operaciones de archivo
+│   └── preview.rs   # vista previa y enlaces
 ├── layout.rs        # disposición del pane_grid (20/40/40), lógica pura
 ├── editor.rs        # key_binding (Tab), aplicación de parches de historial
 ├── explorer.rs      # vista del árbol de archivos y menú de filtros
@@ -213,3 +219,4 @@ Formato `docs/adr/NNNN-titulo-en-kebab.md`: **Contexto / Decisión / Alternativa
 | 0003 | pulldown-cmark para preview, comrak para exportación | Aceptado |
 | 0004 | Persistencia en TOML sin base de datos | Aceptado |
 | 0005 | Historial de deshacer/rehacer propio | Aceptado |
+| 0006 | Documentos abiertos: uno activo y el resto aparcados | Aceptado |

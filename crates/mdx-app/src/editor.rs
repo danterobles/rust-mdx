@@ -13,7 +13,11 @@ use crate::app::Message;
 /// `Tab` / `Shift+Tab` indentan y desindentan; el resto usa el comportamiento por defecto.
 pub fn key_binding(key_press: KeyPress) -> Option<Binding<Message>> {
     let focused = matches!(key_press.status, Status::Focused { .. });
-    if focused && key_press.key == Key::Named(Named::Tab) && !key_press.modifiers.command() {
+    if focused
+        && key_press.key == Key::Named(Named::Tab)
+        && !key_press.modifiers.command()
+        && !key_press.modifiers.control()
+    {
         let edit = if key_press.modifiers.shift() {
             Edit::Unindent
         } else {
