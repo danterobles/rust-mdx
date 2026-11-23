@@ -150,8 +150,8 @@
 - [x] AC2 Snapshot test 🧪 — `export::tests::snapshot_of_the_exported_body`, `snapshot_of_the_whole_document` (`insta`)
 
 ### US-4.4 Imágenes
-- [ ] AC1 Imágenes relativas en preview 👁
-- [ ] AC2 Pegar imagen → `./assets/` 🧪 + 👁
+- [x] AC1 Imágenes relativas en preview 👁 (fixture `fixtures/imagenes.md`)
+- [x] AC2 Pegar imagen → `./assets/` 🧪 + 👁 — `assets::tests::pasted_images_are_saved_*`, `app::tests::a_saved_image_is_inserted_*`
 
 ### US-4.5 Zoom
 - [x] AC1 Ctrl/Cmd +/-/0 👁

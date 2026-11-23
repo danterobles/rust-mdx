@@ -255,7 +255,7 @@ impl App {
 
     /// Sustituye la selección actual del editor por `text` como una edición normal
     /// (historial, «sin guardar», vista previa).
-    fn apply_text_edit(&mut self, text: &str) -> Task<Message> {
+    pub(super) fn apply_text_edit(&mut self, text: &str) -> Task<Message> {
         let action = if text.is_empty() {
             Action::Edit(Edit::Delete)
         } else {

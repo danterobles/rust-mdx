@@ -70,6 +70,7 @@ flowchart LR
 | `link` | `classify(url, base_dir) -> LinkTarget` | Enlaces de la preview: externo, Markdown local o no soportado |
 | `outline` | `extract(text) -> Outline`, `top_level_blocks(text) -> Vec<Block>` | `pulldown-cmark` con `into_offset_iter` para obtener la línea |
 | `search` | `find_all`, `replace_all`, `replacement_for`, `search_workspace(root, q, &AtomicBool) -> WorkspaceSearch` (+ `_async`) | `regex`; recorrido con `ignore`; cancelación con `Arc<AtomicBool>`; máx. 5 000 resultados |
+| `assets` | `resolve_image(url, base)`, `save_clipboard_image(dir, w, h, rgba)`, `next_asset_name`, `encode_png` | Rutas de imágenes de la preview y guardado de imágenes pegadas en `assets/` |
 | `export` | `to_html(text, title)`, `body_html`, `export_to_file(path, text, title)` | `comrak` con GFM, sin HTML crudo; CSS embebido que sigue el modo claro/oscuro del navegador |
 | `config` | `Config::load(path)`, `Config::parse`, `Config::ensure_file`, `ConfigWarning`, `TEMPLATE` | `serde` + `toml`; valida y acota; nunca sobrescribe el archivo del usuario (INV-6) |
 | `session` | `Session`, `Session::boot`, `restore_plan`, recientes, `save` | Guardado atómico; `paths::app_files()` resuelve las rutas (`MDX_CONFIG_DIR`/`MDX_STATE_DIR` las sustituyen) |
@@ -87,12 +88,14 @@ mdx-app/src/
 │   ├── disk.rs      # watcher, cambios externos, conflictos
 │   ├── explorer_ops.rs # árbol, menú contextual, operaciones de archivo
 │   ├── preview.rs   # vista previa, parseo en segundo plano y enlaces
+│   ├── paste.rs     # pegar imágenes y texto del portapapeles
 │   ├── search_ops.rs # buscar/reemplazar y búsqueda en carpeta
 │   ├── session_ops.rs # sesión, recientes y autoguardado
 │   ├── sync.rs      # scroll sincronizado editor → vista previa
 │   └── zoom.rs      # zoom del editor y la vista previa
 ├── layout.rs        # disposición del pane_grid (20/40/40), lógica pura
 ├── editor.rs        # key_binding (Tab), aplicación de parches de historial
+├── clipboard.rs     # lectura de imágenes del portapapeles (arboard)
 ├── explorer.rs      # vista del árbol de archivos y menú de filtros
 ├── outline.rs       # panel «Esquema» (encabezados del documento activo)
 ├── search.rs        # barra buscar/reemplazar y panel de búsqueda en carpeta
@@ -228,3 +231,4 @@ Formato `docs/adr/NNNN-titulo-en-kebab.md`: **Contexto / Decisión / Alternativa
 | 0005 | Historial de deshacer/rehacer propio | Aceptado |
 | 0006 | Documentos abiertos: uno activo y el resto aparcados | Aceptado |
 | 0007 | Feature `advanced` de iced para el scroll sincronizado | Aceptado |
+| 0008 | Imágenes del portapapeles: `arboard` y PNG con `image` | Aceptado |

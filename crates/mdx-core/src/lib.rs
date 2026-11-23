@@ -9,6 +9,7 @@
     allow(clippy::unwrap_used, clippy::expect_used, clippy::assert_is_empty)
 )]
 
+pub mod assets;
 pub mod config;
 pub mod document;
 pub mod error;

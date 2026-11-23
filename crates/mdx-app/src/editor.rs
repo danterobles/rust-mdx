@@ -25,6 +25,15 @@ pub fn key_binding(key_press: KeyPress) -> Option<Binding<Message>> {
         };
         return Some(Binding::Custom(Message::Edit(Action::Edit(edit))));
     }
+    // Cmd/Ctrl+V: si el portapapeles trae una imagen se guarda junto al documento (US-4.4);
+    // si no, la aplicación pega el texto.
+    if focused
+        && key_press.modifiers.command()
+        && !key_press.modifiers.alt()
+        && key_press.key.to_latin(key_press.physical_key) == Some('v')
+    {
+        return Some(Binding::Custom(Message::PasteRequested));
+    }
     Binding::from_key_press(key_press)
 }
 
@@ -152,6 +161,42 @@ pub fn is_mergeable(action: &text_editor::Action) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn key_press(c: &str, modifiers: iced::keyboard::Modifiers, focused: bool) -> KeyPress {
+        use iced::keyboard::key::{Code, Physical};
+        KeyPress {
+            key: Key::Character(c.into()),
+            modified_key: Key::Character(c.into()),
+            physical_key: Physical::Code(Code::KeyV),
+            modifiers,
+            text: Some(c.into()),
+            status: if focused {
+                Status::Focused { is_hovered: false }
+            } else {
+                Status::Active
+            },
+        }
+    }
+
+    #[test]
+    fn command_v_in_the_focused_editor_requests_a_smart_paste() {
+        // AC2
+        let cmd = iced::keyboard::Modifiers::COMMAND;
+        assert!(matches!(
+            key_binding(key_press("v", cmd, true)),
+            Some(Binding::Custom(Message::PasteRequested))
+        ));
+        // Sin enfocar el editor (p. ej. otro campo de texto) no se intercepta.
+        assert!(!matches!(
+            key_binding(key_press("v", cmd, false)),
+            Some(Binding::Custom(Message::PasteRequested))
+        ));
+        // Una `v` normal se sigue escribiendo.
+        assert!(matches!(
+            key_binding(key_press("v", iced::keyboard::Modifiers::empty(), true)),
+            Some(Binding::Insert('v'))
+        ));
+    }
 
     #[test]
     fn unknown_or_generic_font_families_fall_back_to_the_system_monospace() {

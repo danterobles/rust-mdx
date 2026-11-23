@@ -27,6 +27,7 @@ impl App {
                         }
                         app.outline = parsed.outline;
                         app.blocks = parsed.blocks;
+                        app.unavailable_images = parsed.unavailable_images;
                     }
                 });
                 // Nuevo contenido renderizado: se mide de nuevo (solo la pestaña activa).
@@ -74,6 +75,10 @@ impl App {
                 }
                 Task::none()
             }
+            m @ (Message::PasteRequested
+            | Message::ClipboardImage(_)
+            | Message::PasteText(_)
+            | Message::ImageSaved(..)) => self.update_paste(m),
             _ => Task::none(),
         }
     }
@@ -116,6 +121,12 @@ impl App {
         let generation = self.preview_gen;
         let id = self.doc.id;
         let text = self.doc.text.clone();
+        let base = self
+            .doc
+            .path
+            .as_deref()
+            .and_then(Path::parent)
+            .map(Path::to_path_buf);
         // El esquema se calcula siempre; los elementos de la vista previa solo si está visible.
         let want_items = self.preview_visible;
         Task::perform(
@@ -126,10 +137,12 @@ impl App {
                     } else {
                         Vec::new()
                     };
+                    let unavailable_images = unavailable_images(&items, base.as_deref());
                     Parsed {
                         items,
                         outline: mdx_core::outline::extract(&text),
                         blocks: mdx_core::outline::top_level_blocks(&text),
+                        unavailable_images,
                     }
                 })
                 .await
@@ -137,6 +150,7 @@ impl App {
                     items: Vec::new(),
                     outline: Vec::new(),
                     blocks: Vec::new(),
+                    unavailable_images: std::collections::HashSet::new(),
                 })
             },
             move |parsed| Message::PreviewParsed(id, generation, parsed),
@@ -168,5 +182,52 @@ impl App {
                 Task::none()
             }
         }
+    }
+}
+
+/// URLs de imagen de la vista previa que no se pueden dibujar: remotas, sin ruta resoluble o
+/// cuyo archivo no existe. Comprueba el disco, por eso corre en el hilo de parseo.
+fn unavailable_images(
+    items: &[markdown::Item],
+    base: Option<&Path>,
+) -> std::collections::HashSet<String> {
+    items
+        .iter()
+        .filter_map(|item| match item {
+            markdown::Item::Image { url, .. } => Some(url),
+            _ => None,
+        })
+        .filter(|url| !mdx_core::assets::resolve_image(url, base).is_some_and(|p| p.is_file()))
+        .cloned()
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn items(text: &str) -> Vec<markdown::Item> {
+        markdown::parse(text).collect()
+    }
+
+    #[test]
+    fn only_missing_remote_or_unresolvable_images_are_unavailable() {
+        // AC1
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::create_dir_all(dir.path().join("assets")).unwrap();
+        std::fs::write(dir.path().join("assets/ok.png"), "x").unwrap();
+        let md = "![a](assets/ok.png)\n\n![b](assets/falta.png)\n\n![c](https://x.org/r.png)\n\n![d](nota.txt)\n";
+        let unavailable = unavailable_images(&items(md), Some(dir.path()));
+        let mut list: Vec<_> = unavailable.iter().map(String::as_str).collect();
+        list.sort_unstable();
+        assert_eq!(
+            list,
+            ["assets/falta.png", "https://x.org/r.png", "nota.txt"]
+        );
+        // Sin directorio base (documento sin guardar) ninguna ruta relativa se puede resolver.
+        assert_eq!(
+            unavailable_images(&items("![a](assets/ok.png)"), None).len(),
+            1
+        );
     }
 }

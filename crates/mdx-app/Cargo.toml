@@ -20,6 +20,7 @@ tracing-subscriber.workspace = true
 anyhow.workspace = true
 rfd.workspace = true
 open.workspace = true
+arboard.workspace = true
 tokio.workspace = true
 futures.workspace = true
 
