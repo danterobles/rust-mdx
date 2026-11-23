@@ -71,8 +71,8 @@ flowchart LR
 | `outline` | `extract(text) -> Outline`, `top_level_blocks(text) -> Vec<Block>` | `pulldown-cmark` con `into_offset_iter` para obtener la línea |
 | `search` | `find_all`, `replace_all`, `replacement_for`, `search_workspace(root, q, &AtomicBool) -> WorkspaceSearch` (+ `_async`) | `regex`; recorrido con `ignore`; cancelación con `Arc<AtomicBool>`; máx. 5 000 resultados |
 | `export` | `to_html(text, theme) -> String` | `comrak` con GFM; CSS embebido |
-| `config` | `Config`, `load()`, `save()`, migraciones | `serde` + `toml`; valida y acota |
-| `session` | `Session`, `load()`, `save()` | Igual que config |
+| `config` | `Config::load(path)`, `Config::parse`, `ConfigWarning` | `serde` + `toml`; solo lectura (nunca sobrescribe el archivo del usuario); en US-3.5 solo `[files]` |
+| `session` | `Session`, `Session::boot`, `restore_plan`, recientes, `save` | Guardado atómico; `paths::app_files()` resuelve las rutas (`MDX_CONFIG_DIR`/`MDX_STATE_DIR` las sustituyen) |
 | `error` | `CoreError` | `thiserror`, `Clone` |
 
 ## 4. Estructura de `mdx-app`
@@ -88,6 +88,7 @@ mdx-app/src/
 │   ├── explorer_ops.rs # árbol, menú contextual, operaciones de archivo
 │   ├── preview.rs   # vista previa, parseo en segundo plano y enlaces
 │   ├── search_ops.rs # buscar/reemplazar y búsqueda en carpeta
+│   ├── session_ops.rs # sesión, recientes y autoguardado
 │   └── sync.rs      # scroll sincronizado editor → vista previa
 ├── layout.rs        # disposición del pane_grid (20/40/40), lógica pura
 ├── editor.rs        # key_binding (Tab), aplicación de parches de historial

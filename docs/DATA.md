@@ -204,6 +204,10 @@ Ubicación por `directories::ProjectDirs::from("mx", "doitconsulting", "mdx")`:
 
 Todos los archivos de Mdx se escriben con `io::write_atomic`.
 
+Las variables de entorno `MDX_CONFIG_DIR` y `MDX_STATE_DIR` sustituyen los directorios anteriores (pruebas, instalaciones portables).
+
+> **Estado de implementación:** en US-3.5 `config.toml` solo se interpreta la sección `[files]` (`autosave`, `autosave_delay_ms`); el resto del esquema llega con US-4.2. Mdx **nunca escribe** `config.toml`.
+
 ### 4.1 `config.toml` (editable por el usuario)
 
 ```toml

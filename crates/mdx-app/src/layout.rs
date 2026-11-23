@@ -31,6 +31,40 @@ pub fn initial_panes() -> pane_grid::State<PaneKind> {
     })
 }
 
+/// Proporciones actuales `(explorador, editor dentro del resto)`. El segundo es `None` si la
+/// vista previa está oculta (solo hay dos paneles).
+#[must_use]
+pub fn current_ratios(state: &pane_grid::State<PaneKind>) -> Option<(f32, Option<f32>)> {
+    let pane_grid::Node::Split { ratio, b, .. } = state.layout() else {
+        return None;
+    };
+    let inner = match &**b {
+        pane_grid::Node::Split { ratio, .. } => Some(*ratio),
+        pane_grid::Node::Pane(_) => None,
+    };
+    Some((*ratio, inner))
+}
+
+/// Aplica las proporciones restauradas de la sesión a los divisores existentes.
+pub fn apply_ratios(state: &mut pane_grid::State<PaneKind>, explorer: f32, inner_editor: f32) {
+    let (outer, inner) = match state.layout() {
+        pane_grid::Node::Split { id, b, .. } => (
+            Some(*id),
+            match &**b {
+                pane_grid::Node::Split { id, .. } => Some(*id),
+                pane_grid::Node::Pane(_) => None,
+            },
+        ),
+        pane_grid::Node::Pane(_) => (None, None),
+    };
+    if let Some(id) = outer {
+        state.resize(id, explorer);
+    }
+    if let Some(id) = inner {
+        state.resize(id, inner_editor);
+    }
+}
+
 /// Disposición con la vista previa oculta: Explorador 20 % · Editor 80 %.
 #[must_use]
 pub fn panes_without_preview() -> pane_grid::State<PaneKind> {
@@ -92,6 +126,17 @@ mod tests {
             panic!("split esperado")
         };
         assert!((ratio - 0.3).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn ratios_can_be_read_and_applied() {
+        let mut state = initial_panes();
+        assert_eq!(current_ratios(&state), Some((0.2, Some(0.5))));
+        apply_ratios(&mut state, 0.3, 0.6);
+        assert_eq!(current_ratios(&state), Some((0.3, Some(0.6))));
+        let mut two = panes_without_preview();
+        apply_ratios(&mut two, 0.25, 0.9);
+        assert_eq!(current_ratios(&two), Some((0.25, None)));
     }
 
     #[test]

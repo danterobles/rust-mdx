@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::mem;
 
+use super::session_ops::DocSummary;
 use super::{
     App, Block, DiskState, Document, DocumentId, History, Instant, Layout, Message, Outline, Path,
     PendingAction, Task, markdown, strings, text_editor,
@@ -29,6 +30,7 @@ pub(super) struct OpenDoc {
     pub(super) outline: Outline,
     pub(super) blocks: Vec<Block>,
     pub(super) view_top: (usize, f32),
+    pub(super) last_change: Instant,
 }
 
 pub(super) type Parked = HashMap<DocumentId, OpenDoc>;
@@ -51,6 +53,7 @@ impl App {
             outline: mem::take(&mut self.outline),
             blocks: mem::take(&mut self.blocks),
             view_top: mem::take(&mut self.view_top),
+            last_change: self.last_change,
         }
     }
 
@@ -69,6 +72,7 @@ impl App {
         self.outline = d.outline;
         self.blocks = d.blocks;
         self.view_top = d.view_top;
+        self.last_change = d.last_change;
     }
 
     /// Intercambia el documento activo con el aparcado `id`. No toca el modelo de pestañas.
@@ -114,6 +118,26 @@ impl App {
     pub(super) fn open_docs(&self) -> impl Iterator<Item = (&Document, bool)> {
         std::iter::once((&self.doc, self.dirty))
             .chain(self.parked.values().map(|p| (&p.doc, p.dirty)))
+    }
+
+    /// Resumen de todos los documentos abiertos (para el autoguardado).
+    pub(super) fn doc_summaries(&self) -> Vec<DocSummary> {
+        let active = DocSummary {
+            id: self.doc.id,
+            path_is_set: self.doc.path.is_some(),
+            dirty: self.dirty,
+            disk_state: self.doc.disk_state,
+            last_change: self.last_change,
+        };
+        std::iter::once(active)
+            .chain(self.parked.values().map(|p| DocSummary {
+                id: p.doc.id,
+                path_is_set: p.doc.path.is_some(),
+                dirty: p.dirty,
+                disk_state: p.doc.disk_state,
+                last_change: p.last_change,
+            }))
+            .collect()
     }
 
     pub(super) fn find_open(&self, path: &Path) -> Option<DocumentId> {

@@ -92,6 +92,7 @@ impl App {
     pub(super) fn refresh_stats(&mut self) {
         self.preview_pending = true;
         self.preview_edit_at = Instant::now();
+        self.last_change = Instant::now();
         self.dirty = self.doc.is_dirty();
         self.words = count_words(&self.doc.text);
     }
@@ -133,6 +134,9 @@ impl App {
                     .is_some_and(|p| doc.path.as_deref() == Some(p.as_path()));
                 let name = doc.display_name(strings::UNTITLED);
                 let opened_path = doc.path.clone();
+                if let Some(path) = &opened_path {
+                    self.note_recent_file(path);
+                }
                 let task = self.add_doc(doc, pinned);
                 self.set_status(format!("{}: {name}", strings::STATUS_OPENED), false);
                 // Resultado de la búsqueda en carpeta: posicionar el editor en la coincidencia.
@@ -159,6 +163,7 @@ impl App {
         id: DocumentId,
         result: Result<SavedInfo, CoreError>,
     ) -> Task<Message> {
+        self.autosave_inflight.remove(&id);
         let saved = self
             .with_doc(id, |app| app.apply_saved(result))
             .unwrap_or(false);
@@ -188,6 +193,8 @@ impl App {
                 true
             }
             Err(err) => {
+                // Un fallo (p. ej. autoguardado sin permisos) no debe reintentarse en bucle.
+                self.last_change = Instant::now();
                 self.set_status(err.to_string(), true);
                 false
             }

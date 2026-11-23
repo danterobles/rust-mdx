@@ -9,12 +9,15 @@ publish = false
 description = "Lógica pura de Mdx (sin UI)"
 
 [dependencies]
+directories.workspace = true
 futures.workspace = true
 ignore.workspace = true
 notify.workspace = true
 notify-debouncer-full.workspace = true
 pulldown-cmark.workspace = true
 regex.workspace = true
+serde.workspace = true
+toml.workspace = true
 thiserror.workspace = true
 trash.workspace = true
 tokio.workspace = true

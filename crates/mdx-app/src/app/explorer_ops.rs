@@ -17,20 +17,22 @@ impl App {
                 match result {
                     Ok(ws) => {
                         let msg = format!("{}: {}", strings::STATUS_FOLDER_OPENED, ws.tree.name);
+                        self.note_recent_folder(&ws.root.clone());
                         self.explorer.workspace = Some(ws);
                         self.explorer.selected = None;
                         self.set_status(msg, false);
                     }
                     Err(err) => self.set_status(err.to_string(), true),
                 }
-                Task::none()
+                // Sesión restaurada: abrir las carpetas que estaban expandidas.
+                self.expand_pending()
             }
             Message::ToggleDir(path) => self.toggle_dir(&path),
             Message::DirLoaded(path, result) => {
                 if let Some(ws) = &mut self.explorer.workspace {
                     ws.set_children(&path, result);
                 }
-                Task::none()
+                self.expand_pending()
             }
             Message::FileClicked(path) => self.open_from_explorer(path, false),
             Message::FilePinned(path) => self.open_from_explorer(path, true),

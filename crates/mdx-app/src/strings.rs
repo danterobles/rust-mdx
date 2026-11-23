@@ -98,3 +98,13 @@ pub const WS_NO_RESULTS: &str = "Sin resultados en {files} archivos";
 pub const WS_SUMMARY: &str = "{matches} resultados en {files} archivos";
 pub const WS_TRUNCATED: &str = " (hay más; afine la búsqueda)";
 pub const WS_CANCELLED: &str = " (cancelada: resultados parciales)";
+
+pub const RECENT_FOLDERS: &str = "Carpetas recientes";
+pub const RECENT_FILES: &str = "Archivos recientes";
+pub const CONFIG_INVALID: &str =
+    "config.toml no es válido ({detail}); se usan los valores por defecto.";
+pub const CONFIG_NEWER: &str = "config.toml es de una versión más nueva de Mdx (esquema {version}); se usan los valores por defecto.";
+pub const CONFIG_CLAMPED: &str = "config.toml: «{field}» estaba fuera de rango y se acotó.";
+pub const SESSION_UNUSABLE: &str =
+    "No se pudo leer la sesión anterior; se empieza con una sesión vacía.";
+pub const SESSION_SAVE_FAILED: &str = "No se pudo guardar la sesión";

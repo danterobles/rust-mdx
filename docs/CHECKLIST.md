@@ -126,10 +126,10 @@
 - [x] AC3 Búsqueda en workspace cancelable 🧪 + 👁
 
 ### US-3.5 Autoguardado y sesión
-- [ ] AC1 Autoguardado opcional 🧪
-- [ ] AC2 Sesión guardada al cerrar 🧪
-- [ ] AC3 Restauración con rutas faltantes 🧪 (INV-5)
-- [ ] AC4 Recientes (máx. 10) 🧪
+- [x] AC1 Autoguardado opcional 🧪 — `app::tests::autosave_*`, `config::tests::*`
+- [x] AC2 Sesión guardada al cerrar 🧪 — `app::tests::snapshot_captures_*`, `signature_changes_*`, `session::tests::toml_roundtrip_*`, `save_and_load_roundtrip_*` (+ prueba de extremo a extremo manual del archivo escrito)
+- [x] AC3 Restauración con rutas faltantes 🧪 (INV-5), también al abrir con argumento (decisión del propietario) — `session::tests::missing_paths_skipped`, `boot_restores_existing_files_in_order_*`, `app::tests::restoring_a_session_*`, `expanded_directories_from_the_session_*`
+- [x] AC4 Recientes (máx. 10) 🧪 — `session::tests::recents_are_most_recent_first_*`, `app::tests::opening_files_and_folders_feeds_the_recents_list`, `recents_are_capped_at_ten_files`
 
 - [ ] **Hito F3**: sesión de trabajo completa con varias pestañas y búsqueda 👁
 

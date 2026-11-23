@@ -6,6 +6,7 @@ mod editing;
 mod explorer_ops;
 mod preview;
 mod search_ops;
+mod session_ops;
 mod sync;
 #[cfg(test)]
 mod tests;
@@ -26,13 +27,16 @@ use iced::{
     Element, Event, Font, Length, Subscription, Task, Theme, event, highlighter, keyboard, time,
     window,
 };
+use mdx_core::config::{Config, LoadedConfig};
 use mdx_core::document::count_words;
 use mdx_core::fileops;
 use mdx_core::history::History;
 use mdx_core::io::SavedInfo;
 use mdx_core::link::{self, LinkTarget};
 use mdx_core::outline::{Block, Outline};
+use mdx_core::paths::{self, AppFiles};
 use mdx_core::search::WorkspaceSearch;
+use mdx_core::session::{Boot, Session};
 use mdx_core::watcher::{self, FsEvent};
 use mdx_core::workspace::{self, FileNode, TreeFilters, Workspace};
 use mdx_core::{CoreError, DiskState, Document, DocumentId};
@@ -60,6 +64,27 @@ impl markdown::Viewer<'_, String> for PreviewViewer {
     }
 }
 
+/// Qué pidió abrir la línea de comandos (`mdx <ruta>`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CliTarget {
+    Folder(PathBuf),
+    File(PathBuf),
+}
+
+/// Estado de la sesión persistente (US-3.5).
+pub struct SessionState {
+    /// Rutas de `config.toml` y `session.toml` (`None` si no hay directorio personal).
+    files: Option<AppFiles>,
+    /// Sesión leída al arrancar (aporta los «Recientes»); se completa al guardar.
+    data: Session,
+    /// La sesión anterior ya se leyó: antes de eso no se guarda (no pisarla a medio restaurar).
+    ready: bool,
+    /// Argumento de la línea de comandos pendiente de abrir tras restaurar la sesión.
+    cli: Option<CliTarget>,
+    /// Carpetas que estaban expandidas en la sesión, pendientes de abrir.
+    pending_expand: Vec<PathBuf>,
+}
+
 pub struct App {
     explorer: ExplorerState,
     sidebar: Sidebar,
@@ -83,6 +108,12 @@ pub struct App {
     pending_goto: Option<(PathBuf, usize, std::ops::Range<usize>)>,
     find: FindState,
     ws_search: WorkspaceSearchState,
+    config: Config,
+    sess: SessionState,
+    /// Documentos con un autoguardado en curso.
+    autosave_inflight: std::collections::HashSet<DocumentId>,
+    /// Último cambio del documento activo (para el retraso del autoguardado).
+    last_change: Instant,
     panes: pane_grid::State<PaneKind>,
     doc: Document,
     content: text_editor::Content,
@@ -223,6 +254,12 @@ pub enum Message {
     LayoutChanged,
     SetSidebar(Sidebar),
     GoToLine(usize),
+    ConfigLoaded(LoadedConfig),
+    SessionBooted(Box<Boot>),
+    SessionSaved(Result<(), CoreError>),
+    AutosaveTick(Instant),
+    OpenRecentFolder(PathBuf),
+    OpenRecentFile(PathBuf),
     FindQueryChanged(String),
     ReplaceChanged(String),
     FindOptionToggled(FindOption),
@@ -251,21 +288,40 @@ impl App {
         let mut tabs = Tabs::new();
         tabs.open_pinned(doc.id);
         let mut pin_on_load = None;
-        let boot = match arg {
-            Some(path) if path.is_dir() => Task::perform(
-                workspace::open_async(path, filters),
-                Message::WorkspaceOpened,
+        let app_files = paths::app_files();
+        let cli = arg.map(|path| {
+            if path.is_dir() {
+                CliTarget::Folder(path)
+            } else {
+                CliTarget::File(path)
+            }
+        });
+        // Con la sesión disponible se restaura primero y el argumento se abre después, encima.
+        // Sin directorio de estado no hay sesión: el argumento se abre de inmediato.
+        let session_boot = Self::boot_tasks(app_files.clone());
+        let (cli_boot, cli_pending) = match (app_files.is_some(), cli) {
+            (true, cli) => (Task::none(), cli),
+            (false, Some(CliTarget::Folder(path))) => (
+                Task::perform(
+                    workspace::open_async(path, filters),
+                    Message::WorkspaceOpened,
+                ),
+                None,
             ),
-            Some(path) => {
+            (false, Some(CliTarget::File(path))) => {
                 // Apertura explícita por CLI: la pestaña queda fijada.
                 pin_on_load = Some(path.clone());
-                Task::perform(
-                    async move { mdx_core::io::read_document(&path).await },
-                    Message::DocumentLoaded,
+                (
+                    Task::perform(
+                        async move { mdx_core::io::read_document(&path).await },
+                        Message::DocumentLoaded,
+                    ),
+                    None,
                 )
             }
-            None => Task::none(),
+            (false, None) => (Task::none(), None),
         };
+        let boot = Task::batch([cli_boot, session_boot]);
         (
             Self {
                 explorer: ExplorerState {
@@ -286,6 +342,16 @@ impl App {
                 parked: Parked::new(),
                 pin_on_load,
                 pending_goto: None,
+                config: Config::default(),
+                sess: SessionState {
+                    files: app_files,
+                    data: Session::default(),
+                    ready: false,
+                    cli: cli_pending,
+                    pending_expand: Vec::new(),
+                },
+                autosave_inflight: std::collections::HashSet::new(),
+                last_change: Instant::now(),
                 find: FindState::default(),
                 ws_search: WorkspaceSearchState::default(),
                 external: None,
@@ -356,6 +422,11 @@ impl App {
                 _ => None,
             }),
             window::close_requests().map(|_| Message::CloseRequested),
+            if self.autosave_armed() {
+                time::every(Duration::from_millis(250)).map(Message::AutosaveTick)
+            } else {
+                Subscription::none()
+            },
             self.watch_subscriptions(),
             window::resize_events().map(|_| Message::LayoutChanged),
             if self.preview_pending {
@@ -366,9 +437,21 @@ impl App {
         ])
     }
 
+    /// Procesa un mensaje y, si cambió algo que forma parte de la sesión (pestañas abiertas,
+    /// carpeta, recientes…), guarda `session.toml` en segundo plano.
+    pub fn update(&mut self, message: Message) -> Task<Message> {
+        let before = self.session_signature();
+        let task = self.update_inner(message);
+        if self.can_save_session() && self.session_signature() != before {
+            Task::batch([task, self.save_session()])
+        } else {
+            task
+        }
+    }
+
     // iced exige `Message` por valor; crecerá con las próximas historias.
     #[allow(clippy::needless_pass_by_value)]
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    fn update_inner(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::PaneResized(event) => {
                 self.panes.resize(event.split, event.ratio);
@@ -378,7 +461,9 @@ impl App {
             Message::LayoutChanged => self.measure_preview(),
             Message::Edit(action) => self.handle_edit(action),
             Message::Shortcut(action) => self.handle_shortcut(action),
-            Message::FilePicked(Some(path)) => self.open_path(path, true),
+            Message::FilePicked(Some(path)) | Message::OpenRecentFile(path) => {
+                self.open_path(path, true)
+            }
             Message::FilePicked(None) | Message::FolderPicked(None) => Task::none(),
             Message::DocumentLoaded(result) => self.handle_loaded(result),
             Message::SavePicked(Some(path)) => self.save_to(path),
@@ -404,6 +489,19 @@ impl App {
                 Task::none()
             }
             Message::GoToLine(line) => self.go_to_line(line),
+            Message::ConfigLoaded(loaded) => {
+                self.apply_config(loaded);
+                Task::none()
+            }
+            Message::SessionBooted(boot) => self.apply_boot(*boot),
+            Message::SessionSaved(result) => {
+                if let Err(err) = result {
+                    self.set_status(format!("{}: {err}", strings::SESSION_SAVE_FAILED), true);
+                }
+                Task::none()
+            }
+            Message::AutosaveTick(now) => self.autosave_tick(now),
+            Message::OpenRecentFolder(path) => self.open_recent_folder(path),
             m @ (Message::PreviewTick(_)
             | Message::PreviewParsed(..)
             | Message::PreviewMeasured(..)
@@ -497,7 +595,14 @@ impl App {
 
     fn run(&mut self, action: PendingAction) -> Task<Message> {
         match action {
-            PendingAction::Close => iced::exit(),
+            PendingAction::Close => {
+                // La sesión debe estar escrita antes de salir.
+                if self.can_save_session() {
+                    self.save_session().then(|_| iced::exit())
+                } else {
+                    iced::exit()
+                }
+            }
             PendingAction::CloseTab(id) => self.close_tab(id),
         }
     }
@@ -649,7 +754,11 @@ impl App {
                     .spacing(6)
                     .push(self.sidebar_switch())
                     .push(match self.sidebar {
-                        Sidebar::Files => explorer::view(&self.explorer, self.doc.path.as_deref()),
+                        Sidebar::Files => explorer::view(
+                            &self.explorer,
+                            self.doc.path.as_deref(),
+                            &self.sess.data.recent,
+                        ),
                         Sidebar::Outline => outline_panel::view(&self.outline),
                         Sidebar::Search => search_ui::workspace_panel(
                             &self.ws_search,

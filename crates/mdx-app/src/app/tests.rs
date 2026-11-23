@@ -1498,3 +1498,415 @@ fn a_stale_pending_position_is_dropped_when_another_file_opens_or_loading_fails(
         "se acota a la última línea"
     );
 }
+
+// ------------------------------------------------ US-3.5: autoguardado y sesión
+
+use mdx_core::config::{ConfigWarning, LoadedConfig};
+use mdx_core::session::{Boot, RestorePlan, Session};
+
+fn with_autosave(app: &mut App, on: bool) {
+    app.config.files.autosave = on;
+    app.config.files.autosave_delay_ms = 2000;
+}
+
+/// Abre `a.md` (con ruta) y lo deja con cambios sin guardar.
+fn dirty_file_doc(app: &mut App, name: &str) -> DocumentId {
+    let id = open_pinned_doc(app, name, "base");
+    type_char(app, 'X');
+    id
+}
+
+fn after(app: &App, ms: u64) -> Instant {
+    app.last_change + Duration::from_millis(ms)
+}
+
+#[test]
+fn autosave_is_off_by_default() {
+    // AC1
+    let (mut app, _) = App::new(None);
+    assert!(!app.config.files.autosave);
+    dirty_file_doc(&mut app, "a.md");
+    assert!(app.autosave_candidates(after(&app, 60_000)).is_empty());
+    assert!(!app.autosave_armed());
+}
+
+#[test]
+fn autosave_waits_for_the_delay_after_the_last_change() {
+    // AC1: 2 s de inactividad.
+    let (mut app, _) = App::new(None);
+    with_autosave(&mut app, true);
+    let id = dirty_file_doc(&mut app, "a.md");
+    assert!(app.autosave_armed());
+    assert!(app.autosave_candidates(after(&app, 1999)).is_empty());
+    assert_eq!(app.autosave_candidates(after(&app, 2000)), [id]);
+    // Una nueva pulsación reinicia la espera.
+    type_char(&mut app, 'Y');
+    assert!(app.autosave_candidates(after(&app, 1500)).is_empty());
+}
+
+#[test]
+fn autosave_only_applies_to_saved_dirty_documents_without_conflicts() {
+    // AC1: solo con ruta; nunca pisa cambios externos ni resucita archivos borrados.
+    let (mut app, _) = App::new(None);
+    with_autosave(&mut app, true);
+    // Sin título: sin ruta → nunca.
+    type_char(&mut app, 'u');
+    assert!(app.autosave_candidates(after(&app, 60_000)).is_empty());
+    // Con ruta pero limpio.
+    let clean = open_pinned_doc(&mut app, "limpio.md", "texto");
+    assert!(
+        !app.autosave_candidates(after(&app, 60_000))
+            .contains(&clean)
+    );
+    // Con conflicto con el disco.
+    let conflict = dirty_file_doc(&mut app, "conflicto.md");
+    app.doc.disk_state = DiskState::ChangedExternally;
+    assert!(app.autosave_candidates(after(&app, 60_000)).is_empty());
+    app.doc.disk_state = DiskState::Deleted;
+    assert!(app.autosave_candidates(after(&app, 60_000)).is_empty());
+    app.doc.disk_state = DiskState::InSync;
+    assert_eq!(app.autosave_candidates(after(&app, 60_000)), [conflict]);
+}
+
+#[test]
+fn autosave_reaches_background_tabs_and_avoids_double_saves() {
+    let (mut app, _) = App::new(None);
+    with_autosave(&mut app, true);
+    let a = dirty_file_doc(&mut app, "a.md");
+    let b = open_pinned_doc(&mut app, "b.md", "dos");
+    let now = app.last_change + Duration::from_secs(60);
+    assert_eq!(
+        app.autosave_candidates(now),
+        [a],
+        "a está en segundo plano y con cambios"
+    );
+    let _ = app.update(Message::AutosaveTick(now));
+    assert_eq!(app.doc.id, b, "la pestaña activa no cambia");
+    assert!(app.autosave_inflight.contains(&a));
+    assert!(
+        app.autosave_candidates(now).is_empty(),
+        "ya hay un guardado en curso"
+    );
+    // Al terminar se libera.
+    let info = SavedInfo {
+        path: PathBuf::from("/proyecto/a.md"),
+        saved_hash: mdx_core::document::hash_text("Xbase"),
+        mtime: None,
+    };
+    let _ = app.update(Message::Saved(a, Ok(info)));
+    assert!(!app.autosave_inflight.contains(&a));
+    assert!(app.first_dirty().is_none());
+}
+
+#[test]
+fn a_failed_autosave_is_not_retried_immediately() {
+    let (mut app, _) = App::new(None);
+    with_autosave(&mut app, true);
+    let a = dirty_file_doc(&mut app, "a.md");
+    let now = app.last_change + Duration::from_secs(60);
+    let _ = app.update(Message::AutosaveTick(now));
+    let _ = app.update(Message::Saved(
+        a,
+        Err(CoreError::PermissionDenied(PathBuf::from("/x"))),
+    ));
+    assert!(app.status.as_ref().is_some_and(|s| s.is_error));
+    assert!(
+        app.autosave_candidates(Instant::now()).is_empty(),
+        "reinicia la espera"
+    );
+}
+
+#[test]
+fn config_loaded_enables_autosave_and_reports_warnings() {
+    let (mut app, _) = App::new(None);
+    let mut loaded = LoadedConfig::default();
+    loaded.config.files.autosave = true;
+    loaded.config.files.autosave_delay_ms = 1000;
+    let _ = app.update(Message::ConfigLoaded(loaded));
+    assert!(app.config.files.autosave && app.config.files.autosave_delay_ms == 1000);
+    let bad = LoadedConfig {
+        warnings: vec![ConfigWarning::Invalid("línea 3".to_owned())],
+        ..LoadedConfig::default()
+    };
+    let _ = app.update(Message::ConfigLoaded(bad));
+    assert!(
+        !app.config.files.autosave,
+        "se usan los valores por defecto"
+    );
+    assert!(
+        app.status
+            .as_ref()
+            .is_some_and(|s| s.is_error && s.text.contains("línea 3"))
+    );
+}
+
+#[test]
+fn snapshot_captures_workspace_tabs_active_tab_and_layout() {
+    // AC2
+    let (mut app, _) = App::new(None);
+    let (_dir, ws) = ws_with_files();
+    let root = ws.root.clone();
+    let _ = app.update(Message::WorkspaceOpened(Ok(ws)));
+    open_pinned_doc(&mut app, "a.md", "uno");
+    let b = open_pinned_doc(&mut app, "b.md", "dos");
+    let _ = app.update(Message::Shortcut(ShortcutAction::New)); // «Sin título»: no se persiste
+    let _ = app.update(Message::SelectTab(b));
+    let s = app.session_snapshot();
+    assert_eq!(s.workspace, Some(root.clone()));
+    assert_eq!(
+        s.open_files,
+        [
+            PathBuf::from("/proyecto/a.md"),
+            PathBuf::from("/proyecto/b.md")
+        ]
+    );
+    assert_eq!(s.active_tab, 1);
+    assert!(s.recent.folders.contains(&root));
+    assert!((s.layout.explorer_ratio - 0.2).abs() < 1e-4);
+    assert!((s.layout.editor_ratio - 0.4).abs() < 1e-4);
+}
+
+#[test]
+fn signature_changes_with_tabs_and_recents_but_not_with_typing() {
+    // AC2: se guarda al cambiar la sesión, no en cada pulsación.
+    let (mut app, _) = App::new(None);
+    let initial = app.session_signature();
+    open_pinned_doc(&mut app, "a.md", "uno");
+    let with_tab = app.session_signature();
+    assert_ne!(initial, with_tab);
+    type_char(&mut app, 'x');
+    assert_eq!(app.session_signature(), with_tab);
+    let id = app.doc.id;
+    let _ = app.update(Message::GuardAnswered(
+        PendingAction::CloseTab(id),
+        GuardChoice::Discard,
+    ));
+    assert_ne!(app.session_signature(), with_tab);
+}
+
+#[test]
+fn nothing_is_saved_before_the_previous_session_has_been_read() {
+    let (mut app, _) = App::new(None);
+    assert!(!app.can_save_session());
+    let _ = app.update(Message::SessionBooted(Box::default()));
+    assert_eq!(app.can_save_session(), app.sess.files.is_some());
+}
+
+fn boot_with(app: &mut App, session: Session, plan: RestorePlan, docs: Vec<Document>) {
+    let boot = Boot {
+        session,
+        plan,
+        documents: docs,
+        unusable: false,
+    };
+    let _ = app.update(Message::SessionBooted(Box::new(boot)));
+}
+
+fn doc_at(path: &str, text: &str) -> Document {
+    Document::from_bytes(Path::new(path), text.as_bytes(), None).unwrap()
+}
+
+#[test]
+fn restoring_a_session_reopens_tabs_in_order_with_the_saved_active_tab_and_panes() {
+    // AC3
+    let (mut app, _) = App::new(None);
+    let session = Session {
+        layout: mdx_core::session::Layout {
+            explorer_ratio: 0.3,
+            editor_ratio: 0.35,
+        },
+        ..Session::default()
+    };
+    let plan = RestorePlan {
+        files: vec![PathBuf::from("/p/a.md"), PathBuf::from("/p/b.md")],
+        active: Some(PathBuf::from("/p/a.md")),
+        ..RestorePlan::default()
+    };
+    boot_with(
+        &mut app,
+        session,
+        plan,
+        vec![doc_at("/p/a.md", "A"), doc_at("/p/b.md", "B")],
+    );
+    assert_eq!(tab_names(&app), ["a.md", "b.md"]);
+    assert_eq!(
+        app.doc.path.as_deref(),
+        Some(Path::new("/p/a.md")),
+        "pestaña activa"
+    );
+    assert_eq!(
+        unpinned_tabs(&app),
+        0,
+        "las pestañas restauradas quedan fijas"
+    );
+    let (explorer, inner) = crate::layout::current_ratios(&app.panes).unwrap();
+    assert!((explorer - 0.3).abs() < 1e-4);
+    assert!((inner.unwrap() - 0.35 / 0.7).abs() < 1e-3);
+}
+
+fn saved_plan() -> RestorePlan {
+    RestorePlan {
+        files: vec![PathBuf::from("/p/a.md"), PathBuf::from("/p/b.md")],
+        active: Some(PathBuf::from("/p/a.md")),
+        ..RestorePlan::default()
+    }
+}
+
+fn saved_docs() -> Vec<Document> {
+    vec![doc_at("/p/a.md", "A"), doc_at("/p/b.md", "B")]
+}
+
+/// `App::new` con un argumento: solo difiere del arranque normal si hay directorio de estado.
+fn app_with_cli(arg: &str) -> App {
+    let (mut app, _) = App::new(Some(PathBuf::from(arg)));
+    app.sess.files = Some(mdx_core::paths::AppFiles {
+        config_file: PathBuf::from("/x/config.toml"),
+        session_file: PathBuf::from("/x/session.toml"),
+    });
+    app.sess.cli = Some(CliTarget::File(PathBuf::from(arg)));
+    app
+}
+
+#[test]
+fn a_cli_file_is_added_on_top_of_the_restored_session_and_becomes_active() {
+    // AC3 (decisión del propietario): con argumento también se restaura la sesión.
+    let mut app = app_with_cli("/p/nuevo.md");
+    boot_with(&mut app, Session::default(), saved_plan(), saved_docs());
+    assert_eq!(tab_names(&app), ["a.md", "b.md"], "primero lo restaurado");
+    assert!(app.sess.cli.is_none(), "el argumento ya se consumió");
+    // El archivo del argumento llega después de leerse y queda activo.
+    let _ = app.update(Message::DocumentLoaded(Ok(doc_at("/p/nuevo.md", "N"))));
+    assert_eq!(tab_names(&app), ["a.md", "b.md", "nuevo.md"]);
+    assert_eq!(app.doc.path.as_deref(), Some(Path::new("/p/nuevo.md")));
+}
+
+#[test]
+fn a_cli_file_already_in_the_session_just_becomes_the_active_tab() {
+    let mut app = app_with_cli("/p/b.md");
+    boot_with(&mut app, Session::default(), saved_plan(), saved_docs());
+    assert_eq!(tab_names(&app), ["a.md", "b.md"], "sin duplicados");
+    assert_eq!(app.doc.path.as_deref(), Some(Path::new("/p/b.md")));
+}
+
+#[test]
+fn a_cli_folder_replaces_the_session_workspace() {
+    let (mut app, _) = App::new(None);
+    app.sess.cli = Some(CliTarget::Folder(PathBuf::from("/otra")));
+    let plan = RestorePlan {
+        workspace: Some(PathBuf::from("/guardada")),
+        expanded_dirs: vec![PathBuf::from("/guardada/docs")],
+        ..RestorePlan::default()
+    };
+    boot_with(&mut app, Session::default(), plan, Vec::new());
+    assert!(
+        app.sess.pending_expand.is_empty(),
+        "no se expanden carpetas de otra carpeta"
+    );
+    assert!(app.sess.cli.is_none());
+}
+
+#[test]
+fn a_session_without_cli_still_restores_everything() {
+    let (mut app, _) = App::new(None);
+    let mut session = Session::default();
+    session.recent.files = vec![PathBuf::from("/p/a.md")];
+    boot_with(&mut app, session, saved_plan(), saved_docs());
+    assert_eq!(tab_names(&app), ["a.md", "b.md"]);
+    assert_eq!(app.sess.data.recent.files, [PathBuf::from("/p/a.md")]);
+}
+
+#[test]
+fn an_unusable_previous_session_only_warns() {
+    let (mut app, _) = App::new(None);
+    let boot = Boot {
+        unusable: true,
+        ..Boot::default()
+    };
+    let _ = app.update(Message::SessionBooted(Box::new(boot)));
+    assert!(app.status.as_ref().is_some_and(|s| s.is_error));
+    assert_eq!(app.tabs.tabs().len(), 1);
+}
+
+#[test]
+fn opening_files_and_folders_feeds_the_recents_list() {
+    // AC4
+    let (mut app, _) = App::new(None);
+    open_pinned_doc(&mut app, "a.md", "uno");
+    assert_eq!(
+        app.sess.data.recent.files,
+        [PathBuf::from("/proyecto/a.md")]
+    );
+    let (_dir, ws) = ws_with_files();
+    let root = ws.root.clone();
+    let _ = app.update(Message::WorkspaceOpened(Ok(ws)));
+    assert_eq!(app.sess.data.recent.folders, [root]);
+    // Reabrir un archivo ya reciente lo sube al principio sin duplicarlo.
+    open_pinned_doc(&mut app, "b.md", "dos");
+    let _ = app.update(Message::OpenRecentFile(PathBuf::from("/proyecto/a.md")));
+    assert_eq!(
+        app.sess.data.recent.files[0],
+        PathBuf::from("/proyecto/b.md")
+    );
+}
+
+#[test]
+fn recents_are_capped_at_ten_files() {
+    let (mut app, _) = App::new(None);
+    for i in 0..14 {
+        open_pinned_doc(&mut app, &format!("f{i}.md"), "x");
+    }
+    assert_eq!(app.sess.data.recent.files.len(), 10);
+    assert_eq!(
+        app.sess.data.recent.files[0],
+        PathBuf::from("/proyecto/f13.md")
+    );
+}
+
+#[test]
+fn expanded_directories_from_the_session_open_as_their_parents_load() {
+    // AC3: carpetas expandidas, de afuera hacia adentro.
+    let dir = tempfile::TempDir::new().unwrap();
+    std::fs::create_dir_all(dir.path().join("a/b")).unwrap();
+    std::fs::write(dir.path().join("a/b/n.md"), "x").unwrap();
+    let ws = Workspace::open(dir.path(), TreeFilters::default()).unwrap();
+    let (a, b) = (ws.root.join("a"), ws.root.join("a/b"));
+    let (mut app, _) = App::new(None);
+    app.sess.pending_expand = vec![b.clone(), a.clone()];
+    let _ = app.update(Message::WorkspaceOpened(Ok(ws)));
+    let expanded = |app: &App, p: &Path| {
+        matches!(
+            app.explorer
+                .workspace
+                .as_ref()
+                .unwrap()
+                .node(p)
+                .map(|n| &n.kind),
+            Some(mdx_core::workspace::NodeKind::Dir { expanded: true, .. })
+        )
+    };
+    assert!(expanded(&app, &a), "a no necesita a nadie");
+    assert!(
+        app.sess.pending_expand.contains(&b),
+        "b espera a que cargue a"
+    );
+    let kids = workspace::load_children(&a, &TreeFilters::default());
+    let _ = app.update(Message::DirLoaded(a.clone(), kids));
+    assert!(expanded(&app, &b));
+    assert!(app.sess.pending_expand.is_empty());
+}
+
+#[test]
+fn autosave_due_is_a_simple_threshold() {
+    let t0 = Instant::now();
+    let d = Duration::from_millis(2000);
+    assert!(!session_ops::autosave_due(
+        t0,
+        t0 + Duration::from_millis(1999),
+        d
+    ));
+    assert!(session_ops::autosave_due(t0, t0 + d, d));
+    assert!(
+        !session_ops::autosave_due(t0 + d, t0, d),
+        "un instante anterior no cuenta"
+    );
+}

@@ -1,5 +1,8 @@
 //! Punto de entrada de Mdx.
 
+// Los tests comparan colecciones vacías con `assert!(..is_empty())`.
+#![cfg_attr(test, allow(clippy::assert_is_empty))]
+
 mod app;
 mod editor;
 mod explorer;

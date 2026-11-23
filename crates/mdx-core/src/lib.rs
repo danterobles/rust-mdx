@@ -4,8 +4,12 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 // NFR-5 aplica al código de producción; los tests pueden usar unwrap.
-#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
+#![cfg_attr(
+    test,
+    allow(clippy::unwrap_used, clippy::expect_used, clippy::assert_is_empty)
+)]
 
+pub mod config;
 pub mod document;
 pub mod error;
 pub mod fileops;
@@ -13,7 +17,9 @@ pub mod history;
 pub mod io;
 pub mod link;
 pub mod outline;
+pub mod paths;
 pub mod search;
+pub mod session;
 pub mod watcher;
 pub mod workspace;
 
