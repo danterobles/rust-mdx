@@ -106,7 +106,7 @@ Decisiones:
 - **Pendientes de verificación 👁 al cerrar** (no bloquean según decisión del propietario, quedan abiertos): Hito F1 (editar README sin pérdida de datos), NFR-2 (primer frame), NFR-3 con archivo de 100 KB, NFR-4 visual con `large_1mb/5mb`.
 - Tag `v0.2.0`: **no creado**; requiere autorización explícita.
 
-## US-2.1 Abrir carpeta — 🟡 implementada, pendiente verificación 👁 AC1 y AC6 (rama feat/us-2.1-abrir-carpeta)
+## US-2.1 Abrir carpeta — ✅ completa (rama feat/us-2.1-abrir-carpeta)
 Plan: `mdx-core::workspace` (árbol, filtros, `load_children` con `ignore::WalkBuilder` a profundidad 1), `mdx-app` (`explorer.rs`, `app.rs`, `shortcuts.rs`, CLI en `main.rs`).
 - AC1 🧪/👁 Ctrl/Cmd+Shift+O abre el selector de carpeta; `mdx <ruta>`: carpeta → workspace, archivo → editor. Verificar a mano.
 - AC2 🧪 solo se lee el primer nivel; cada carpeta se lee al expandirla (`Children::NotLoaded → Loading → Loaded`).
@@ -121,3 +121,4 @@ Decisiones:
 - El árbol se dibuja completo en cada `view` (iced no virtualiza): con un directorio de 10 000 entradas expandido puede notarse; vigilar en la verificación 👁 de AC6 y, si hace falta, paginar/virtualizar (ADR).
 - Archivos y enlaces simbólicos: `follow_links(false)`.
 - Con `mdx <ruta>` que no existe, se muestra el error de lectura en la barra de estado.
+- Verificación 👁 AC1 y AC6 confirmada manualmente por el propietario el 2026-11-23.
