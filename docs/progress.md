@@ -219,7 +219,7 @@ Decisiones y límites:
 - `PreviewViewer` mínimo propio (solo enlace → mensaje); el resto del aspecto es el predeterminado de iced.
 - Verificación 👁 AC1 y AC2 confirmada manualmente por el propietario el 2026-11-23.
 
-## US-3.4 Buscar y reemplazar — 🟡 implementada, pendiente verificación 👁 AC1 y AC3 (rama feat/us-3.4-buscar-reemplazar)
+## US-3.4 Buscar y reemplazar — ✅ completa (rama feat/us-3.4-buscar-reemplazar)
 Plan: `mdx-core::search` (`SearchQuery`, `find_all`, `replace_all`, `replacement_for`, `search_workspace`), `mdx-app` (`search.rs` vistas, `app/search_ops.rs`, atajos), `history::pos_to_offset`, `CoreError::InvalidPattern`.
 - AC1 🧪/👁 Ctrl/Cmd+F abre la barra sobre el editor (campo enfocado, prellena con la selección de una línea); Ctrl+H abre también el campo de reemplazo (**en macOS Cmd+Opt+F**, porque Cmd+H es «ocultar» del sistema, según PRD §10). Buscar selecciona la coincidencia en el editor; ↑/↓ (o Enter) navegan con vuelta al principio/final; contador «2 de 5»; Esc cierra. «Reemplazar» sustituye la actual y salta a la siguiente; «Reemplazar todo» lo hace en **un solo paso de deshacer**. Reemplazos como ediciones normales (historial, `●`, vista previa).
 - AC2 🧪 distinguir mayúsculas, palabra completa (`\b`) y regex; en modo regex el reemplazo admite `$1`/`$nombre`; en modo literal `$` no se interpreta. Un regex inválido muestra el motivo en rojo y no hay coincidencias. Las coincidencias vacías (p. ej. `x*`) se ignoran.
@@ -231,3 +231,4 @@ Decisiones y límites:
 - Las coincidencias del documento se recalculan al escribir, cambiar de pestaña o abrir/recargar un documento mientras la barra está abierta (O(n) por pulsación; medir en NFR-4).
 - Sin resaltado de **todas** las coincidencias en el texto (el `text_editor` de iced no permite pintar rangos arbitrarios): solo se selecciona la actual y la barra muestra el contador.
 - Reemplazar todo pega el texto completo en una operación (`Edit::Paste`): con documentos de varios MB puede tardar.
+- Verificación 👁 AC1 y AC3 confirmada manualmente por el propietario el 2026-11-23.
