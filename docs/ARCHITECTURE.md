@@ -89,7 +89,8 @@ mdx-app/src/
 │   ├── preview.rs   # vista previa, parseo en segundo plano y enlaces
 │   ├── search_ops.rs # buscar/reemplazar y búsqueda en carpeta
 │   ├── session_ops.rs # sesión, recientes y autoguardado
-│   └── sync.rs      # scroll sincronizado editor → vista previa
+│   ├── sync.rs      # scroll sincronizado editor → vista previa
+│   └── zoom.rs      # zoom del editor y la vista previa
 ├── layout.rs        # disposición del pane_grid (20/40/40), lógica pura
 ├── editor.rs        # key_binding (Tab), aplicación de parches de historial
 ├── explorer.rs      # vista del árbol de archivos y menú de filtros

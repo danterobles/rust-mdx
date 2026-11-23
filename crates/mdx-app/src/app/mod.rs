@@ -10,6 +10,7 @@ mod session_ops;
 mod sync;
 #[cfg(test)]
 mod tests;
+mod zoom;
 
 use documents::Parked;
 use editing::{ask_unsaved, pick_file_to_open};
@@ -54,6 +55,7 @@ use crate::state::tabs::Tabs;
 use crate::statusbar::{Stats, display_col};
 use crate::strings;
 use crate::theme;
+use zoom::ZoomChange;
 
 /// Visor de Markdown por defecto; solo define cómo se convierte un enlace en mensaje.
 struct PreviewViewer;
@@ -111,6 +113,8 @@ pub struct App {
     config: Config,
     /// Modo claro/oscuro que informa el sistema operativo (para `theme = "system"`).
     system_mode: iced::theme::Mode,
+    /// Zoom actual (factor del tamaño de fuente del editor y de la vista previa).
+    zoom: f32,
     /// Fuente del editor resuelta desde `[editor] font_family`.
     editor_font: Font,
     sess: SessionState,
@@ -138,6 +142,9 @@ pub struct App {
     preview_pending: bool,
     preview_edit_at: Instant,
 }
+
+/// Tamaño base del texto de la vista previa (iced usa 16 px por defecto).
+const PREVIEW_BASE_TEXT_PX: f32 = 16.0;
 
 /// Espera tras la última edición antes de re-parsear la vista previa (US-1.4 AC1).
 const PREVIEW_DEBOUNCE: Duration = Duration::from_millis(150);
@@ -352,6 +359,7 @@ impl App {
                 pending_goto: None,
                 config: Config::default(),
                 system_mode: iced::theme::Mode::None,
+                zoom: 1.0,
                 editor_font: Font::MONOSPACE,
                 sess: SessionState {
                     files: app_files,
@@ -585,6 +593,9 @@ impl App {
             }
             ShortcutAction::TogglePreview => self.toggle_preview(),
             ShortcutAction::OpenConfig => self.open_config(),
+            ShortcutAction::ZoomIn => self.change_zoom(ZoomChange::Step(1)),
+            ShortcutAction::ZoomOut => self.change_zoom(ZoomChange::Step(-1)),
+            ShortcutAction::ZoomReset => self.change_zoom(ZoomChange::Reset),
             ShortcutAction::Find => self.open_find(false),
             ShortcutAction::Replace => self.open_find(true),
             ShortcutAction::FindInWorkspace => self.open_workspace_search(),
@@ -786,14 +797,17 @@ impl App {
                             .on_action(Message::Edit)
                             .key_binding(editor::key_binding)
                             .font(self.editor_font)
-                            .size(editor::font_px(self.config.editor.font_size))
+                            .size(editor::zoomed_px(self.config.editor.font_size, self.zoom))
                             .wrapping(editor::wrapping(self.config.editor.line_wrap))
                             .highlight("markdown", theme::highlight_theme(&theme))
                             .height(Length::Fill),
                     )
                     .into(),
                 PaneKind::Preview => {
-                    let settings = markdown::Settings::from(&theme);
+                    let settings = markdown::Settings::with_text_size(
+                        PREVIEW_BASE_TEXT_PX * self.zoom,
+                        markdown::Style::from(&theme),
+                    );
                     let blocks = self.preview.iter().enumerate().map(|(i, item)| {
                         container(markdown::item(&PreviewViewer, settings, item, i))
                             .id(preview_sync::block_id(i))

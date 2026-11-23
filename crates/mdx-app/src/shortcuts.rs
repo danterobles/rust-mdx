@@ -15,6 +15,10 @@ pub enum ShortcutAction {
     Redo,
     TogglePreview,
     CloseTab,
+    /// Aumentar, reducir o restablecer el zoom del editor y la vista previa.
+    ZoomIn,
+    ZoomOut,
+    ZoomReset,
     /// Abrir `config.toml` en una pestaña.
     OpenConfig,
     /// Buscar en el documento.
@@ -104,6 +108,10 @@ pub fn map(key: &Key, physical: Physical, modifiers: Modifiers) -> Option<Shortc
         ('s', true) => Some(ShortcutAction::SaveAs),
         ('w', false) => Some(ShortcutAction::CloseTab),
         (',', false) => Some(ShortcutAction::OpenConfig),
+        // `+` suele exigir Shift; `=` es la misma tecla sin él.
+        ('+' | '=', _) => Some(ShortcutAction::ZoomIn),
+        ('-' | '_', _) => Some(ShortcutAction::ZoomOut),
+        ('0', false) => Some(ShortcutAction::ZoomReset),
         ('f', false) => Some(ShortcutAction::Find),
         ('f', true) => Some(ShortcutAction::FindInWorkspace),
         ('h', false) if !cfg!(target_os = "macos") => Some(ShortcutAction::Replace),
@@ -179,7 +187,11 @@ mod tests {
             press("9", Code::Digit9, cmd),
             Some(ShortcutAction::GoToTab(9))
         );
-        assert_eq!(press("0", Code::Digit0, cmd), None);
+        // El 0 no es una pestaña: es «restablecer zoom».
+        assert_eq!(
+            press("0", Code::Digit0, cmd),
+            Some(ShortcutAction::ZoomReset)
+        );
         // Teclado donde la fila numérica exige Shift: la tecla física sigue valiendo.
         assert_eq!(
             press("&", Code::Digit1, cmd),
@@ -198,6 +210,36 @@ mod tests {
         assert_eq!(
             map(&tab, Physical::Code(Code::Tab), Modifiers::empty()),
             None
+        );
+    }
+
+    #[test]
+    fn maps_zoom_shortcuts() {
+        // AC1
+        let cmd = Modifiers::COMMAND;
+        assert_eq!(press("=", Code::Equal, cmd), Some(ShortcutAction::ZoomIn));
+        assert_eq!(
+            press("+", Code::Equal, cmd | Modifiers::SHIFT),
+            Some(ShortcutAction::ZoomIn)
+        );
+        assert_eq!(
+            press("+", Code::NumpadAdd, cmd),
+            Some(ShortcutAction::ZoomIn)
+        );
+        assert_eq!(press("-", Code::Minus, cmd), Some(ShortcutAction::ZoomOut));
+        assert_eq!(
+            press("-", Code::NumpadSubtract, cmd),
+            Some(ShortcutAction::ZoomOut)
+        );
+        assert_eq!(
+            press("0", Code::Digit0, cmd),
+            Some(ShortcutAction::ZoomReset)
+        );
+        assert_eq!(press("-", Code::Minus, Modifiers::empty()), None);
+        // Cmd+1..9 sigue saltando de pestaña.
+        assert_eq!(
+            press("1", Code::Digit1, cmd),
+            Some(ShortcutAction::GoToTab(1))
         );
     }
 

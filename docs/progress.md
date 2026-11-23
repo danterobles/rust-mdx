@@ -284,3 +284,11 @@ Decisiones:
 - Solo dos temas (claro/oscuro) como pide el PRD; sin selector en la interfaz: se cambia en `config.toml`.
 - Pendiente de comprobar a mano: contraste de los colores propios (resaltado de elementos del explorador, banners, casillas) en oscuro, y el resaltado de bloques de código de la vista previa en oscuro.
 - Verificación 👁 AC1 y AC2 confirmada manualmente por el propietario el 2026-11-23.
+
+## US-4.5 Zoom — 🟡 implementada, pendiente verificación 👁 AC1 (rama feat/us-4.5-zoom)
+Plan: `app/zoom.rs` (pasos y límites), atajos en `shortcuts.rs`, tamaño efectivo en el editor y la vista previa, persistencia en `session.toml`.
+- AC1 👁 `Ctrl/Cmd +` (también `=` sin Shift y el `+` del teclado numérico), `-` y `0`. Cada paso es del 10 % (se redondea a décimas para no acumular error), con tope 50 %–300 % (rango de `appearance.zoom`). `0` restablece al zoom de `config.toml`. Se escala el tamaño de fuente del editor (`font_size × zoom`) y el texto de la vista previa (16 px × zoom, con los encabezados proporcionales); el resto de la interfaz (explorador, barra de estado) no cambia, como pide el AC. Tras cada cambio se vuelve a medir la vista previa para mantener el scroll sincronizado.
+Decisiones:
+- **Persistencia:** el zoom elegido con el teclado se guarda en `session.toml` (campo opcional `zoom`, compatible con sesiones antiguas) y al arrancar prevalece sobre `appearance.zoom`; recargar `config.toml` (guardarlo) lo descarta y vuelve al valor del archivo. Es una ampliación menor de DATA §4.2 (actualizada).
+- `Ctrl/Cmd+0` ya no es «ir a la pestaña 0» (nunca lo fue: las pestañas son 1..9).
+- Mdx nunca escribe `appearance.zoom` en `config.toml` (INV-6).
