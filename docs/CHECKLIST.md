@@ -46,13 +46,13 @@
 ## Fase 1 — MVP del editor → v0.2.0
 
 ### US-1.1 Nuevo / Abrir / Guardar
-- [ ] AC1 Ctrl/Cmd+N 👁
-- [ ] AC2 Ctrl/Cmd+O con filtro 👁
-- [ ] AC3 Ctrl/Cmd+S (y Guardar como si no hay ruta) 👁
-- [ ] AC4 Ctrl/Cmd+Shift+S 👁
-- [ ] AC5 Guardado atómico 🧪 (INV-2)
-- [ ] AC6 Preserva LF/CRLF 🧪 (INV-1)
-- [ ] AC7 Error claro con no-UTF-8 🧪
+- [x] AC1 Ctrl/Cmd+N 👁
+- [x] AC2 Ctrl/Cmd+O con filtro 👁
+- [x] AC3 Ctrl/Cmd+S (y Guardar como si no hay ruta) 👁
+- [x] AC4 Ctrl/Cmd+Shift+S 👁
+- [x] AC5 Guardado atómico 🧪 (INV-2) — `io::tests::atomic_failure_keeps_original`
+- [x] AC6 Preserva LF/CRLF 🧪 (INV-1) — `io::tests::roundtrip_preserves_crlf_and_bom`, `edited_crlf_file_stays_crlf`
+- [x] AC7 Error claro con no-UTF-8 🧪 — `io::tests::non_utf8_is_clear_error`
 
 ### US-1.2 Estado "sin guardar"
 - [ ] AC1 `●` en título 👁

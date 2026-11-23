@@ -9,6 +9,14 @@ publish = false
 description = "Lógica pura de Mdx (sin UI)"
 
 [dependencies]
+thiserror.workspace = true
+tokio.workspace = true
+xxhash-rust.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+pretty_assertions.workspace = true
 
 [lints]
 workspace = true

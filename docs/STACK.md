@@ -28,7 +28,7 @@ components = ["rustfmt", "clippy"]
 | Crate | Versión | Features | Para qué |
 |---|---|---|---|
 | `iced` | `0.14` | `tokio`, `highlighter`, `markdown`, `image`, `svg`, `wgpu`, `tiny-skia` (fallback), `crisp`, `x11`, `wayland` | Framework UI |
-| `rfd` | `0.18`| `tokio` | Diálogos nativos de abrir/guardar |
+| `rfd` | `0.18` | default (`xdg-portal`, `wayland`); 0.18 no tiene feature `tokio` | Diálogos nativos de abrir/guardar |
 | `open` | `5.4`| — | Abrir enlaces y "revelar en el sistema" |
 | `arboard` | `3.7`| `image-data` | Pegar imágenes del portapapeles (US-4.4) |
 | `anyhow` | `1` | — | Errores en el borde de la app |

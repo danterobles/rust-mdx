@@ -2,6 +2,7 @@
 
 mod app;
 mod layout;
+mod shortcuts;
 mod strings;
 
 use anyhow::Result;
@@ -16,6 +17,7 @@ fn main() -> Result<()> {
     iced::application(app::App::new, app::App::update, app::App::view)
         .title(app::App::title)
         .theme(app::App::theme)
+        .subscription(app::App::subscription)
         .window_size((1200.0, 750.0))
         .run()?;
     Ok(())

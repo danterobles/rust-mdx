@@ -32,6 +32,7 @@ pub struct Document {
     pub path: Option<PathBuf>,      // None = "Sin título"
     pub text: String,               // contenido en memoria, normalizado a '\n'
     pub line_ending: LineEnding,    // detectado al abrir; se re-aplica al guardar
+    pub has_bom: bool,              // el original traía BOM UTF-8; se re-escribe al guardar
     pub saved_hash: Option<u64>,    // hash (xxh3) del texto normalizado tal como está en disco
     pub disk_mtime: Option<SystemTime>,
     pub disk_state: DiskState,
@@ -52,7 +53,7 @@ pub enum DiskState {
 - `is_dirty() == (hash(text) != saved_hash)`; un documento sin ruta y vacío **no** es dirty.
 - Al abrir: se detecta `LineEnding` (si hay ≥ 1 `\r\n` → `CrLf`), se normaliza `text` a `\n`.
 - Al guardar: se convierte `\n` → `line_ending`, se escribe atómico, se actualiza `saved_hash` y `disk_mtime`.
-- Codificación: solo UTF-8 en v1. BOM UTF-8 se acepta y se preserva (flag interno `has_bom: bool`).
+- Codificación: solo UTF-8 en v1. BOM UTF-8 se acepta y se preserva (campo `has_bom`).
 
 ### 2.3 Workspace y árbol de archivos
 
