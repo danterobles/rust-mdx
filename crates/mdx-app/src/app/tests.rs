@@ -1999,3 +1999,137 @@ fn autosave_due_is_a_simple_threshold() {
         "un instante anterior no cuenta"
     );
 }
+
+// ----------------------------------------------------------- US-4.2: configuración
+
+fn app_with_config_dir() -> (App, PathBuf) {
+    let (mut app, _) = App::new(None);
+    let config_file = PathBuf::from("/cfg/mdx/config.toml");
+    app.sess.files = Some(mdx_core::paths::AppFiles {
+        config_file: config_file.clone(),
+        session_file: PathBuf::from("/st/session.toml"),
+    });
+    (app, config_file)
+}
+
+fn loaded(text: &str) -> LoadedConfig {
+    mdx_core::config::Config::parse(text).unwrap()
+}
+
+#[test]
+fn loaded_config_drives_the_explorer_filters_preview_and_editor_settings() {
+    // AC2
+    let (mut app, _) = App::new(None);
+    let text = "[files]\nrespect_gitignore = false\nshow_hidden = true\nonly_markdown = false\n\
+                [preview]\nsync_scroll = false\nvisible = false\n\
+                [editor]\nfont_size = 20\nline_wrap = false\nfont_family = \"Fuente Que No Existe\"\n";
+    let _ = app.update(Message::ConfigLoaded(loaded(text)));
+    let f = app.explorer.filters;
+    assert!(!f.respect_gitignore && f.show_hidden && !f.only_markdown);
+    assert_eq!(app.sync, SyncScroll::Off);
+    assert!(!app.preview_visible);
+    assert_eq!(
+        app.panes.len(),
+        2,
+        "sin vista previa solo quedan dos paneles"
+    );
+    assert_eq!(app.config.editor.font_size, 20);
+    assert!(!app.config.editor.line_wrap);
+    assert_eq!(
+        app.editor_font,
+        iced::Font::MONOSPACE,
+        "fuente inexistente → monoespaciada"
+    );
+}
+
+#[test]
+fn the_default_config_changes_nothing_at_startup() {
+    let (mut app, _) = App::new(None);
+    let before = app.explorer.filters;
+    let _ = app.update(Message::ConfigLoaded(LoadedConfig::default()));
+    assert_eq!(app.explorer.filters, before);
+    assert!(app.preview_visible && app.sync == SyncScroll::On);
+    assert!(app.status.is_none(), "sin avisos");
+}
+
+#[test]
+fn clamped_values_warn_unknown_keys_do_not() {
+    // AC4
+    let (mut app, _) = App::new(None);
+    let _ = app.update(Message::ConfigLoaded(loaded("futuro = 1\n")));
+    assert!(
+        app.status.is_none(),
+        "una clave desconocida solo se registra"
+    );
+    let _ = app.update(Message::ConfigLoaded(loaded("[editor]\nfont_size = 999\n")));
+    assert_eq!(app.config.editor.font_size, 48);
+    assert!(
+        app.status
+            .as_ref()
+            .is_some_and(|s| s.is_error && s.text.contains("font_size"))
+    );
+}
+
+#[test]
+fn saving_config_toml_reloads_it_and_other_files_do_not() {
+    // AC3: «se aplica al guardar».
+    let (app, config_file) = app_with_config_dir();
+    assert!(app.is_config_file(&config_file));
+    assert!(!app.is_config_file(Path::new("/cfg/mdx/otro.toml")));
+    assert!(!app.is_config_file(Path::new("/proyecto/a.md")));
+}
+
+#[test]
+fn a_reloaded_valid_config_is_confirmed_and_an_invalid_one_falls_back_to_defaults() {
+    // AC3 + AC4
+    let (mut app, _) = App::new(None);
+    let mut custom = loaded("[files]\nautosave = true\n");
+    custom.config.editor.font_size = 22;
+    let _ = app.update(Message::ConfigReloaded(custom));
+    assert!(app.config.files.autosave);
+    assert_eq!(
+        app.status.as_ref().map(|s| s.text.as_str()),
+        Some("Configuración aplicada")
+    );
+    // El archivo quedó inválido: valores por defecto y aviso; la app sigue viva.
+    let bad = LoadedConfig {
+        warnings: vec![ConfigWarning::Invalid("línea 2".to_owned())],
+        ..LoadedConfig::default()
+    };
+    let _ = app.update(Message::ConfigReloaded(bad));
+    assert!(!app.config.files.autosave && app.config.editor.font_size == 14);
+    assert!(
+        app.status
+            .as_ref()
+            .is_some_and(|s| s.is_error && s.text.contains("línea 2"))
+    );
+}
+
+#[test]
+fn the_config_shortcut_opens_the_file_in_a_pinned_tab() {
+    // AC3
+    let (mut app, config_file) = app_with_config_dir();
+    let _ = app.update(Message::Shortcut(ShortcutAction::OpenConfig));
+    let _ = app.update(Message::ConfigFileReady(Ok(config_file.clone())));
+    assert_eq!(app.pin_on_load.as_deref(), Some(config_file.as_path()));
+    let doc = Document::from_bytes(&config_file, b"[files]\nautosave = true\n", None).unwrap();
+    let _ = app.update(Message::DocumentLoaded(Ok(doc)));
+    assert_eq!(tab_names(&app), ["config.toml"]);
+    assert_eq!(unpinned_tabs(&app), 0);
+}
+
+#[test]
+fn the_config_shortcut_reports_when_there_is_no_config_directory() {
+    let (mut app, _) = App::new(None);
+    app.sess.files = None;
+    let _ = app.update(Message::Shortcut(ShortcutAction::OpenConfig));
+    assert!(app.status.as_ref().is_some_and(|s| s.is_error));
+    let _ = app.update(Message::ConfigFileReady(Err(CoreError::PermissionDenied(
+        PathBuf::from("/x"),
+    ))));
+    assert!(
+        app.status
+            .as_ref()
+            .is_some_and(|s| s.text.contains("Permiso"))
+    );
+}

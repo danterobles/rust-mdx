@@ -140,10 +140,10 @@
 - [ ] AC2 Preview con paleta del tema 👁
 
 ### US-4.2 Configuración
-- [ ] AC1 `config.toml` en dir de SO 🧪
-- [ ] AC2 Ajustes soportados 🧪
-- [ ] AC3 Ctrl/Cmd+, y recarga al guardar 👁
-- [ ] AC4 Config inválida → defaults, sin crash 🧪 (INV-6)
+- [x] AC1 `config.toml` en dir de SO 🧪 — `paths::tests::*`, `config::tests::ensure_file_creates_the_template_once_and_never_overwrites`
+- [x] AC2 Ajustes soportados 🧪 — `config::tests::every_supported_setting_can_be_set`, `out_of_range_values_are_clamped_*`, `app::tests::loaded_config_drives_the_explorer_filters_preview_and_editor_settings`, `editor::tests::wrap_and_size_mappings` (tema y zoom se leen y validan; se aplican en US-4.1 y US-4.5)
+- [~] AC3 Ctrl/Cmd+, y recarga al guardar 👁 (🧪 `shortcuts::tests::maps_the_config_shortcut`, `app::tests::the_config_shortcut_opens_the_file_*`, `saving_config_toml_reloads_it_*`, `a_reloaded_valid_config_is_confirmed_*`; verificación visual pendiente)
+- [x] AC4 Config inválida → defaults, sin crash 🧪 (INV-6) — `config::tests::invalid_not_overwritten`, `invalid_toml_wrong_types_unknown_theme_and_newer_schema_are_errors`, `app::tests::a_reloaded_valid_config_is_confirmed_and_an_invalid_one_falls_back_to_defaults`; arranque real con config válida e inválida sin errores y sin tocar el archivo
 
 ### US-4.3 Exportar HTML
 - [ ] AC1 HTML autocontenido 👁

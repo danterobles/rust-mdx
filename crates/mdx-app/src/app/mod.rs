@@ -109,6 +109,8 @@ pub struct App {
     find: FindState,
     ws_search: WorkspaceSearchState,
     config: Config,
+    /// Fuente del editor resuelta desde `[editor] font_family`.
+    editor_font: Font,
     sess: SessionState,
     /// Documentos con un autoguardado en curso.
     autosave_inflight: std::collections::HashSet<DocumentId>,
@@ -255,6 +257,8 @@ pub enum Message {
     SetSidebar(Sidebar),
     GoToLine(usize),
     ConfigLoaded(LoadedConfig),
+    ConfigReloaded(LoadedConfig),
+    ConfigFileReady(Result<PathBuf, CoreError>),
     SessionBooted(Box<Boot>),
     SessionSaved(Result<(), CoreError>),
     AutosaveTick(Instant),
@@ -343,6 +347,7 @@ impl App {
                 pin_on_load,
                 pending_goto: None,
                 config: Config::default(),
+                editor_font: Font::MONOSPACE,
                 sess: SessionState {
                     files: app_files,
                     data: Session::default(),
@@ -489,19 +494,13 @@ impl App {
                 Task::none()
             }
             Message::GoToLine(line) => self.go_to_line(line),
-            Message::ConfigLoaded(loaded) => {
-                self.apply_config(loaded);
-                Task::none()
-            }
-            Message::SessionBooted(boot) => self.apply_boot(*boot),
-            Message::SessionSaved(result) => {
-                if let Err(err) = result {
-                    self.set_status(format!("{}: {err}", strings::SESSION_SAVE_FAILED), true);
-                }
-                Task::none()
-            }
-            Message::AutosaveTick(now) => self.autosave_tick(now),
-            Message::OpenRecentFolder(path) => self.open_recent_folder(path),
+            m @ (Message::ConfigLoaded(_)
+            | Message::ConfigReloaded(_)
+            | Message::ConfigFileReady(_)
+            | Message::SessionBooted(_)
+            | Message::SessionSaved(_)
+            | Message::AutosaveTick(_)
+            | Message::OpenRecentFolder(_)) => self.update_session(m),
             m @ (Message::PreviewTick(_)
             | Message::PreviewParsed(..)
             | Message::PreviewMeasured(..)
@@ -574,6 +573,7 @@ impl App {
                 Task::none()
             }
             ShortcutAction::TogglePreview => self.toggle_preview(),
+            ShortcutAction::OpenConfig => self.open_config(),
             ShortcutAction::Find => self.open_find(false),
             ShortcutAction::Replace => self.open_find(true),
             ShortcutAction::FindInWorkspace => self.open_workspace_search(),
@@ -774,7 +774,9 @@ impl App {
                         text_editor(&self.content)
                             .on_action(Message::Edit)
                             .key_binding(editor::key_binding)
-                            .font(Font::MONOSPACE)
+                            .font(self.editor_font)
+                            .size(editor::font_px(self.config.editor.font_size))
+                            .wrapping(editor::wrapping(self.config.editor.line_wrap))
                             .highlight("markdown", highlighter::Theme::InspiredGitHub)
                             .height(Length::Fill),
                     )

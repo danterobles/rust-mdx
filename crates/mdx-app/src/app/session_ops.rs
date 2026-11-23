@@ -7,10 +7,10 @@ use iced::Task;
 use mdx_core::config::{Config, ConfigWarning, LoadedConfig};
 use mdx_core::paths::AppFiles;
 use mdx_core::session::{Boot, Layout, Session};
-use mdx_core::workspace::{self, Children, FileNode, NodeKind};
+use mdx_core::workspace::{self, Children, FileNode, NodeKind, TreeFilters};
 
-use super::{App, CliTarget, DiskState, DocumentId, Message, strings};
-use crate::layout;
+use super::{App, CliTarget, DiskState, DocumentId, Message, SyncScroll, strings};
+use crate::{editor, layout};
 
 /// Lo que, si cambia, obliga a guardar la sesión (no incluye los anchos de panel: se guardan con
 /// el siguiente cambio y al cerrar, para no escribir mientras se arrastra un divisor).
@@ -46,6 +46,31 @@ fn expanded_dirs(node: &FileNode, out: &mut Vec<PathBuf>) {
 }
 
 impl App {
+    /// Mensajes de configuración, sesión, recientes y autoguardado.
+    pub(super) fn update_session(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::ConfigLoaded(loaded) => self.apply_config(loaded, false),
+            Message::ConfigReloaded(loaded) => self.apply_config(loaded, true),
+            Message::ConfigFileReady(result) => match result {
+                Ok(path) => self.open_path(path, true),
+                Err(err) => {
+                    self.set_status(err.to_string(), true);
+                    Task::none()
+                }
+            },
+            Message::SessionBooted(boot) => self.apply_boot(*boot),
+            Message::SessionSaved(result) => {
+                if let Err(err) = result {
+                    self.set_status(format!("{}: {err}", strings::SESSION_SAVE_FAILED), true);
+                }
+                Task::none()
+            }
+            Message::AutosaveTick(now) => self.autosave_tick(now),
+            Message::OpenRecentFolder(path) => self.open_recent_folder(path),
+            _ => Task::none(),
+        }
+    }
+
     /// Tareas de arranque: configuración y sesión (esta última, restaurada solo sin argumento).
     pub(super) fn boot_tasks(files: Option<AppFiles>) -> Task<Message> {
         let Some(files) = files else {
@@ -61,7 +86,9 @@ impl App {
             async move { Session::boot(&session_file, true).await },
             |boot| Message::SessionBooted(Box::new(boot)),
         );
-        Task::batch([config, session])
+        // En orden: la configuración (filtros del explorador…) ya está aplicada cuando se
+        // restaura la sesión.
+        config.chain(session)
     }
 
     /// `true` si hay dónde guardar la sesión y la anterior ya se leyó.
@@ -69,9 +96,15 @@ impl App {
         self.sess.files.is_some() && self.sess.ready
     }
 
-    pub(super) fn apply_config(&mut self, loaded: LoadedConfig) {
+    /// Aplica una configuración recién cargada (al arrancar o tras guardar `config.toml`).
+    /// Devuelve las tareas necesarias (recargar el árbol, mostrar/ocultar la vista previa).
+    pub(super) fn apply_config(&mut self, loaded: LoadedConfig, reloaded: bool) -> Task<Message> {
         self.config = loaded.config;
-        if let Some(warning) = loaded.warnings.first() {
+        let mut tasks = Vec::new();
+
+        // Aviso al usuario: el primero relevante; las claves desconocidas solo se registran.
+        let mut shown = false;
+        for warning in &loaded.warnings {
             let text = match warning {
                 ConfigWarning::Invalid(detail) => {
                     strings::CONFIG_INVALID.replace("{detail}", detail)
@@ -80,9 +113,83 @@ impl App {
                     strings::CONFIG_NEWER.replace("{version}", &v.to_string())
                 }
                 ConfigWarning::Clamped(field) => strings::CONFIG_CLAMPED.replace("{field}", field),
+                ConfigWarning::UnknownKey(key) => {
+                    tracing::warn!(key, "clave desconocida en config.toml (se ignora)");
+                    continue;
+                }
             };
-            self.set_status(text, true);
+            if !shown {
+                self.set_status(text, true);
+                shown = true;
+            }
         }
+        if reloaded && !shown {
+            self.set_status(strings::CONFIG_APPLIED.to_owned(), false);
+        }
+
+        // Editor.
+        self.editor_font = editor::resolve_font(&self.config.editor.font_family);
+
+        // Explorador: filtros iniciales; si cambiaron se relee la carpeta abierta.
+        let files = &self.config.files;
+        let filters = TreeFilters {
+            respect_gitignore: files.respect_gitignore,
+            show_hidden: files.show_hidden,
+            only_markdown: files.only_markdown,
+        };
+        if filters != self.explorer.filters {
+            self.explorer.filters = filters;
+            if let Some(root) = self.explorer.workspace.as_ref().map(|ws| ws.root.clone()) {
+                tasks.push(Task::perform(
+                    workspace::open_async(root, filters),
+                    Message::WorkspaceOpened,
+                ));
+            }
+        }
+
+        // Vista previa.
+        self.sync = if self.config.preview.sync_scroll {
+            SyncScroll::On
+        } else {
+            SyncScroll::Off
+        };
+        if self.config.preview.visible != self.preview_visible {
+            tasks.push(self.toggle_preview());
+        }
+        Task::batch(tasks)
+    }
+
+    /// Ctrl/Cmd+,: abre `config.toml` en una pestaña (creando la plantilla si no existe).
+    pub(super) fn open_config(&mut self) -> Task<Message> {
+        let Some(path) = self.sess.files.as_ref().map(|f| f.config_file.clone()) else {
+            self.set_status(strings::CONFIG_NO_DIR.to_owned(), true);
+            return Task::none();
+        };
+        Task::perform(
+            async move { Config::ensure_file(&path).await.map(|_| path) },
+            Message::ConfigFileReady,
+        )
+    }
+
+    /// `true` si `path` es el `config.toml` de Mdx.
+    pub(super) fn is_config_file(&self, path: &Path) -> bool {
+        self.sess
+            .files
+            .as_ref()
+            .is_some_and(|f| f.config_file == path)
+    }
+
+    /// Si `saved` es el `config.toml`, devuelve la tarea que lo recarga (AC3: «se aplica al
+    /// guardar»).
+    pub(super) fn reload_config_if_saved(&self, saved: &Path) -> Task<Message> {
+        if !self.is_config_file(saved) {
+            return Task::none();
+        }
+        let path = saved.to_path_buf();
+        Task::perform(
+            async move { Config::load(&path).await },
+            Message::ConfigReloaded,
+        )
     }
 
     /// Aplica la sesión leída al arrancar: recientes y, si procede, carpeta, pestañas y paneles.

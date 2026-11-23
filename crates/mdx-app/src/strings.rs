@@ -108,3 +108,6 @@ pub const CONFIG_CLAMPED: &str = "config.toml: «{field}» estaba fuera de rango
 pub const SESSION_UNUSABLE: &str =
     "No se pudo leer la sesión anterior; se empieza con una sesión vacía.";
 pub const SESSION_SAVE_FAILED: &str = "No se pudo guardar la sesión";
+
+pub const CONFIG_APPLIED: &str = "Configuración aplicada";
+pub const CONFIG_NO_DIR: &str = "No se pudo determinar el directorio de configuración.";
