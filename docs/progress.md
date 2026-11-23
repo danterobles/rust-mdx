@@ -99,3 +99,9 @@ Decisiones:
 - Cobertura: `cargo-llvm-cov` 0.9.2 instalado; `mdx-core` ≈ 97 % por archivo.
 - Hito F1: se añadió `README.md` en la raíz para poder editarlo de principio a fin (👁 del propietario).
 - Mediciones hechas solo en macOS (arm64); Windows/Linux quedan para QA de F5.
+
+## Cierre de F1 → v0.2.0 (2026-11-23)
+- Decisión del propietario: ir directo a 0.2.0 sin cerrar F0 (se omite 0.1.0). F0 sigue con AC2 de US-0.1 en `[~]` (CI remoto sin verificar por falta de `push`), licencia y URL del repositorio en `TBD`.
+- Historias F1: US-1.1, US-1.2, US-1.3 y US-1.4 completas (AC verificados).
+- **Pendientes de verificación 👁 al cerrar** (no bloquean según decisión del propietario, quedan abiertos): Hito F1 (editar README sin pérdida de datos), NFR-2 (primer frame), NFR-3 con archivo de 100 KB, NFR-4 visual con `large_1mb/5mb`.
+- Tag `v0.2.0`: **no creado**; requiere autorización explícita.

@@ -10,6 +10,8 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-23
+
 ### Added
 - Vista previa en vivo con CommonMark y GFM (encabezados, listas, tareas, tablas, código resaltado), actualizada tras 150 ms sin escribir [US-1.4]
 - Enlaces de la vista previa: `http(s)` se abren en el navegador y los `.md` relativos se abren en el editor [US-1.4]
@@ -26,4 +28,5 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 - Ventana principal «Mdx» con explorador, editor y vista previa (20/40/40), divisores arrastrables y barra de estado [US-0.2]
 - Especificación inicial: PRD, DATA, ARCHITECTURE, STACK, CHECKLIST y CLAUDE.md.
 
-[Unreleased]: https://github.com/OWNER/mdx/commits/main
+[Unreleased]: https://github.com/OWNER/mdx/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/OWNER/mdx/releases/tag/v0.2.0

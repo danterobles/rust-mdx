@@ -72,7 +72,7 @@
 - [x] AC3 Enlaces externos y relativos 👁
 - [x] AC4 Ctrl/Cmd+\ alterna preview 👁
 
-- [ ] **Hito F1**: editar el README del repo sin pérdida de datos 👁
+- [~] **Hito F1**: editar el README del repo sin pérdida de datos 👁 (README creado en el cierre; verificación manual pendiente, ver progress.md)
 
 ## Fase 2 — Explorador → v0.3.0
 
