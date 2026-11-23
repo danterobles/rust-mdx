@@ -24,7 +24,7 @@ allow = [
 ]
 
 [licenses.private]
-ignore = true   # crates del workspace con license = "TBD"
+ignore = true   # crates del workspace (publish = false)
 
 [bans]
 multiple-versions = "warn"

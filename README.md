@@ -29,3 +29,7 @@ cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
+
+## Licencia
+
+[MIT](LICENSE). Código fuente: <https://github.com/danterobles/rust-mdx>.

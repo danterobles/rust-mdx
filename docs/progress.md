@@ -325,3 +325,7 @@ Decisiones y límites:
 - Siguen abiertos de fases anteriores: Hito F1 y F3 (👁), comprobaciones visuales de NFR-2/3/4; CI remoto sin ejecutar (AC2 de US-0.1); licencia y URL del repositorio en `TBD`.
 - Linux y Windows siguen sin probarse (watcher, papelera, «revelar», portapapeles de imágenes, atajos).
 - Tags `v0.2.0`…`v0.5.0`: **no creados**; requieren autorización explícita.
+
+## Licencia y repositorio (2026-11-23)
+- Decisión del propietario: licencia **MIT**; repositorio <https://github.com/danterobles/rust-mdx> (remoto `origin` ya configurado por SSH). `Cargo.toml` (`[workspace.package]`), STACK §5, PRD §12 (pregunta 2 resuelta), `LICENSE`, README y enlaces de comparación del CHANGELOG actualizados. El titular del copyright en `LICENSE` es `danterobles` (modificable).
+- Tags y `push`: sin realizar (requieren autorización explícita).

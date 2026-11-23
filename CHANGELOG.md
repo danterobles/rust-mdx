@@ -67,8 +67,8 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 - Ventana principal «Mdx» con explorador, editor y vista previa (20/40/40), divisores arrastrables y barra de estado [US-0.2]
 - Especificación inicial: PRD, DATA, ARCHITECTURE, STACK, CHECKLIST y CLAUDE.md.
 
-[Unreleased]: https://github.com/OWNER/mdx/compare/v0.5.0...HEAD
-[0.5.0]: https://github.com/OWNER/mdx/compare/v0.4.0...v0.5.0
-[0.4.0]: https://github.com/OWNER/mdx/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/OWNER/mdx/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/OWNER/mdx/releases/tag/v0.2.0
+[Unreleased]: https://github.com/danterobles/rust-mdx/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/danterobles/rust-mdx/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/danterobles/rust-mdx/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/danterobles/rust-mdx/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/danterobles/rust-mdx/releases/tag/v0.2.0
