@@ -18,6 +18,7 @@ fn main() -> Result<()> {
         .title(app::App::title)
         .theme(app::App::theme)
         .subscription(app::App::subscription)
+        .exit_on_close_request(false)
         .window_size((1200.0, 750.0))
         .run()?;
     Ok(())

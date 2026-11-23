@@ -11,6 +11,8 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 ## [Unreleased]
 
 ### Added
+- Indicador `●` en el título cuando hay cambios sin guardar [US-1.2]
+- Diálogo Guardar / Descartar / Cancelar al cerrar la ventana, o al usar Nuevo y Abrir, con cambios pendientes [US-1.2]
 - Nuevo, Abrir, Guardar y Guardar como (Ctrl/Cmd+N, O, S, Shift+S) con diálogos nativos [US-1.1]
 - Guardado atómico que evita archivos truncados y conserva finales de línea (LF/CRLF) y BOM [US-1.1]
 - Aviso claro al abrir archivos que no son UTF-8 válido [US-1.1]

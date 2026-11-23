@@ -55,9 +55,9 @@
 - [x] AC7 Error claro con no-UTF-8 🧪 — `io::tests::non_utf8_is_clear_error`
 
 ### US-1.2 Estado "sin guardar"
-- [ ] AC1 `●` en título 👁
-- [ ] AC2 Diálogo al cerrar con cambios 👁
-- [ ] AC3 Deshacer hasta guardado limpia indicador 🧪
+- [~] AC1 `●` en título 👁 (🧪 `app::tests::editing_marks_dirty_in_title`; verificación visual pendiente)
+- [~] AC2 Diálogo al cerrar con cambios 👁 (verificación visual pendiente)
+- [x] AC3 Deshacer hasta guardado limpia indicador 🧪 — `app::tests::returning_to_saved_state_clears_indicator`
 
 ### US-1.3 Editor
 - [ ] AC1 Fuente monoespaciada 👁

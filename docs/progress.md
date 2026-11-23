@@ -37,10 +37,22 @@ Plan: `mdx-core` (`error.rs`, `document.rs`, `io.rs`), `mdx-app` (`shortcuts.rs`
 Decisiones / limitaciones:
 - `rfd 0.18` no tiene feature `tokio` (STACK.md decía lo contrario): se usan features por defecto (`xdg-portal`, `wayland`). Corregido en STACK.
 - Un solo documento en memoria; `Message::Saved` lleva el texto guardado para que `is_dirty` sea correcto si se edita durante el guardado. DATA.md prevé `DocumentId` en los mensajes: llega con pestañas (US-3.1).
-- **Limitación conocida:** Nuevo/Abrir reemplazan el documento actual sin preguntar aunque tenga cambios (el aviso llega con US-1.2 y las pestañas con US-3.1).
+- **Limitación conocida (resuelta en US-1.2):** Nuevo/Abrir reemplazaban el documento sin preguntar.
 - `text_editor` mínimo (sin fuente monoespaciada, resaltado ni conteos): lo completa US-1.3. Título de ventana «nombre — Mdx»; el `●` llega con US-1.2.
-- `doc.text` solo se sincroniza al abrir/guardar (evita O(n) por pulsación); US-1.2 definirá el dirty en vivo.
+- `doc.text` solo se sincronizaba al abrir/guardar; desde US-1.2 se sincroniza en cada edición.
 - Filtro «Todos» con extensión `*`: comportamiento a confirmar por plataforma (👁).
 - Tests de `mdx-core` permiten `unwrap` vía `cfg_attr(test, ...)`; NFR-5 sigue vigente para código de producción.
 - Guardado atómico: temporal `.<nombre>.mdx-tmp-<pid>` en el mismo directorio; no preserva permisos del original (mejora futura si hace falta).
 - Verificación 👁 AC1–AC4 confirmada manualmente por el propietario el 2026-11-23.
+
+## US-1.2 Estado "sin guardar" — 🟡 implementada, pendiente verificación 👁 AC1–AC2 (rama feat/us-1.2-sin-guardar)
+Plan: `app.rs` (`dirty`, `PendingAction`, `GuardChoice`, `after_save`), `strings.rs`, `main.rs` (`exit_on_close_request(false)`).
+- AC1 🧪 `app::tests::editing_marks_dirty_in_title` + 👁 título `● nombre — Mdx`
+- AC2 👁 al cerrar con cambios aparece el diálogo Guardar / Descartar / Cancelar (`rfd::AsyncMessageDialog`, botones personalizados). Guardar → guarda y luego cierra (si el guardado falla o se cancela «Guardar como», no cierra). Descartar → cierra. Cancelar → sigue abierto.
+- AC3 🧪 `app::tests::returning_to_saved_state_clears_indicator` (comparación por hash xxh3 contra `saved_hash`)
+Decisiones:
+- El mismo diálogo protege Nuevo (Ctrl/Cmd+N) y Abrir (Ctrl/Cmd+O) con cambios pendientes: cierra el riesgo de pérdida de datos anotado en US-1.1. Es una extensión mínima del AC2, no una funcionalidad nueva.
+- `dirty` se cachea y se recalcula solo en acciones de edición (`Action::is_edit`), al guardar y al cargar. Cada edición materializa `content.text()` + hash: **medir en NFR-4 (1 MB)** al cierre de F1; si no es fluido, pasar a hash incremental/debounce.
+- Si el usuario edita mientras se guarda, el documento queda sucio (se compara contra el contenido actual).
+- Mensaje de aviso con nombre: «{name}» se sustituye en `strings::UNSAVED_BODY`.
+- Con `exit_on_close_request(false)` el cierre lo decide la app (`iced::exit()`).

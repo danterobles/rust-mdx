@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use iced::widget::{Column, container, pane_grid, text, text_editor};
-use iced::{Element, Event, Length, Subscription, Task, Theme, event, keyboard};
+use iced::{Element, Event, Length, Subscription, Task, Theme, event, keyboard, window};
 use mdx_core::io::SavedInfo;
 use mdx_core::{CoreError, Document};
 
@@ -16,6 +16,26 @@ pub struct App {
     doc: Document,
     content: text_editor::Content,
     status: Option<Status>,
+    /// Caché de `doc.is_dirty()`: se recalcula al editar, guardar o cambiar de documento.
+    dirty: bool,
+    /// Acción a ejecutar cuando termine el guardado en curso (cierre, nuevo, abrir).
+    after_save: Option<PendingAction>,
+}
+
+/// Acciones que descartarían el documento actual; se protegen si hay cambios sin guardar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PendingAction {
+    Close,
+    New,
+    Open,
+}
+
+/// Respuesta del usuario al diálogo de cambios sin guardar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuardChoice {
+    Save,
+    Discard,
+    Cancel,
 }
 
 struct Status {
@@ -31,7 +51,9 @@ pub enum Message {
     FilePicked(Option<PathBuf>),
     DocumentLoaded(Result<Document, CoreError>),
     SavePicked(Option<PathBuf>),
-    Saved(Result<SavedInfo, CoreError>, String),
+    Saved(Result<SavedInfo, CoreError>),
+    CloseRequested,
+    GuardAnswered(PendingAction, GuardChoice),
 }
 
 impl App {
@@ -42,14 +64,17 @@ impl App {
                 doc: Document::untitled(),
                 content: text_editor::Content::new(),
                 status: None,
+                dirty: false,
+                after_save: None,
             },
             Task::none(),
         )
     }
 
     pub fn title(&self) -> String {
+        let mark = if self.dirty { strings::DIRTY_MARK } else { "" };
         format!(
-            "{} — {}",
+            "{mark}{} — {}",
             self.doc.display_name(strings::UNTITLED),
             strings::APP_TITLE
         )
@@ -62,15 +87,18 @@ impl App {
 
     #[allow(clippy::unused_self)]
     pub fn subscription(&self) -> Subscription<Message> {
-        event::listen_with(|event, _status, _window| match event {
-            Event::Keyboard(keyboard::Event::KeyPressed {
-                key,
-                physical_key,
-                modifiers,
-                ..
-            }) => shortcuts::map(&key, physical_key, modifiers).map(Message::Shortcut),
-            _ => None,
-        })
+        Subscription::batch([
+            event::listen_with(|event, _status, _window| match event {
+                Event::Keyboard(keyboard::Event::KeyPressed {
+                    key,
+                    physical_key,
+                    modifiers,
+                    ..
+                }) => shortcuts::map(&key, physical_key, modifiers).map(Message::Shortcut),
+                _ => None,
+            }),
+            window::close_requests().map(|_| Message::CloseRequested),
+        ])
     }
 
     // iced exige `Message` por valor; crecerá con las próximas historias.
@@ -82,7 +110,11 @@ impl App {
                 Task::none()
             }
             Message::Edit(action) => {
+                let is_edit = action.is_edit();
                 self.content.perform(action);
+                if is_edit {
+                    self.refresh_dirty();
+                }
                 Task::none()
             }
             Message::Shortcut(action) => self.handle_shortcut(action),
@@ -90,34 +122,73 @@ impl App {
                 async move { mdx_core::io::read_document(&path).await },
                 Message::DocumentLoaded,
             ),
-            Message::FilePicked(None) | Message::SavePicked(None) => Task::none(),
+            Message::FilePicked(None) => Task::none(),
             Message::DocumentLoaded(result) => {
                 self.handle_loaded(result);
                 Task::none()
             }
             Message::SavePicked(Some(path)) => self.save_to(path),
-            Message::Saved(result, text) => {
-                self.handle_saved(result, text);
+            Message::SavePicked(None) => {
+                self.after_save = None;
                 Task::none()
             }
+            Message::Saved(result) => self.handle_saved(result),
+            Message::CloseRequested => self.request(PendingAction::Close),
+            Message::GuardAnswered(action, choice) => match choice {
+                GuardChoice::Save => {
+                    self.after_save = Some(action);
+                    self.save()
+                }
+                GuardChoice::Discard => self.run(action),
+                GuardChoice::Cancel => Task::none(),
+            },
         }
     }
 
     fn handle_shortcut(&mut self, action: ShortcutAction) -> Task<Message> {
         match action {
-            ShortcutAction::New => {
+            ShortcutAction::New => self.request(PendingAction::New),
+            ShortcutAction::Open => self.request(PendingAction::Open),
+            ShortcutAction::Save => self.save(),
+            ShortcutAction::SaveAs => self.save_as(),
+        }
+    }
+
+    fn save(&self) -> Task<Message> {
+        match self.doc.path.clone() {
+            Some(path) => self.save_to(path),
+            None => self.save_as(),
+        }
+    }
+
+    /// Ejecuta `action`, o pregunta primero si hay cambios sin guardar.
+    fn request(&mut self, action: PendingAction) -> Task<Message> {
+        if !self.dirty {
+            return self.run(action);
+        }
+        let name = self.doc.display_name(strings::UNTITLED);
+        Task::perform(ask_unsaved(name), move |choice| {
+            Message::GuardAnswered(action, choice)
+        })
+    }
+
+    fn run(&mut self, action: PendingAction) -> Task<Message> {
+        match action {
+            PendingAction::Close => iced::exit(),
+            PendingAction::New => {
                 self.doc = Document::untitled();
                 self.content = text_editor::Content::new();
+                self.dirty = false;
                 self.set_status(strings::STATUS_NEW.to_owned(), false);
                 Task::none()
             }
-            ShortcutAction::Open => Task::perform(pick_file_to_open(), Message::FilePicked),
-            ShortcutAction::Save => match self.doc.path.clone() {
-                Some(path) => self.save_to(path),
-                None => self.save_as(),
-            },
-            ShortcutAction::SaveAs => self.save_as(),
+            PendingAction::Open => Task::perform(pick_file_to_open(), Message::FilePicked),
         }
+    }
+
+    fn refresh_dirty(&mut self) {
+        self.doc.text = self.content.text();
+        self.dirty = self.doc.is_dirty();
     }
 
     fn save_as(&self) -> Task<Message> {
@@ -135,11 +206,8 @@ impl App {
         let text = self.content.text();
         let (line_ending, has_bom) = (self.doc.line_ending, self.doc.has_bom);
         Task::perform(
-            async move {
-                let result = mdx_core::io::save_text(&path, &text, line_ending, has_bom).await;
-                (result, text)
-            },
-            |(result, text)| Message::Saved(result, text),
+            async move { mdx_core::io::save_text(&path, &text, line_ending, has_bom).await },
+            Message::Saved,
         )
     }
 
@@ -149,24 +217,34 @@ impl App {
                 self.content = text_editor::Content::with_text(&doc.text);
                 let name = doc.display_name(strings::UNTITLED);
                 self.doc = doc;
+                self.dirty = false;
                 self.set_status(format!("{}: {name}", strings::STATUS_OPENED), false);
             }
-            // AC7: el archivo no se abre y el documento actual queda intacto.
+            // AC7 (US-1.1): el archivo no se abre y el documento actual queda intacto.
             Err(err) => self.set_status(err.to_string(), true),
         }
     }
 
-    fn handle_saved(&mut self, result: Result<SavedInfo, CoreError>, text: String) {
+    fn handle_saved(&mut self, result: Result<SavedInfo, CoreError>) -> Task<Message> {
         match result {
             Ok(info) => {
                 self.doc.path = Some(info.path);
-                self.doc.text = text;
                 self.doc.saved_hash = Some(info.saved_hash);
                 self.doc.disk_mtime = info.mtime;
+                // Se compara con el contenido actual: si se editó durante el guardado, sigue sucio.
+                self.refresh_dirty();
                 let name = self.doc.display_name(strings::UNTITLED);
                 self.set_status(format!("{}: {name}", strings::STATUS_SAVED), false);
+                match self.after_save.take() {
+                    Some(action) => self.run(action),
+                    None => Task::none(),
+                }
             }
-            Err(err) => self.set_status(err.to_string(), true),
+            Err(err) => {
+                self.after_save = None;
+                self.set_status(err.to_string(), true);
+                Task::none()
+            }
         }
     }
 
@@ -227,4 +305,107 @@ async fn pick_file_to_save(suggested: String, dir: Option<PathBuf>) -> Option<Pa
         dialog = dialog.set_directory(dir);
     }
     dialog.save_file().await.map(|h| h.path().to_path_buf())
+}
+
+async fn ask_unsaved(name: String) -> GuardChoice {
+    let result = rfd::AsyncMessageDialog::new()
+        .set_level(rfd::MessageLevel::Warning)
+        .set_title(strings::UNSAVED_TITLE)
+        .set_description(strings::UNSAVED_BODY.replace("{name}", &name))
+        .set_buttons(rfd::MessageButtons::YesNoCancelCustom(
+            strings::UNSAVED_SAVE.to_owned(),
+            strings::UNSAVED_DISCARD.to_owned(),
+            strings::UNSAVED_CANCEL.to_owned(),
+        ))
+        .show()
+        .await;
+    match result {
+        rfd::MessageDialogResult::Yes => GuardChoice::Save,
+        rfd::MessageDialogResult::No => GuardChoice::Discard,
+        rfd::MessageDialogResult::Custom(label) if label == strings::UNSAVED_SAVE => {
+            GuardChoice::Save
+        }
+        rfd::MessageDialogResult::Custom(label) if label == strings::UNSAVED_DISCARD => {
+            GuardChoice::Discard
+        }
+        _ => GuardChoice::Cancel,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use iced::widget::text_editor::{Action, Edit};
+
+    fn type_char(app: &mut App, c: char) {
+        let _ = app.update(Message::Edit(Action::Edit(Edit::Insert(c))));
+    }
+
+    #[test]
+    fn starts_clean_and_untitled() {
+        let (app, _) = App::new();
+        assert_eq!(app.title(), "Sin título — Mdx");
+    }
+
+    #[test]
+    fn editing_marks_dirty_in_title() {
+        // AC1
+        let (mut app, _) = App::new();
+        type_char(&mut app, 'a');
+        assert_eq!(app.title(), "● Sin título — Mdx");
+    }
+
+    #[test]
+    fn returning_to_saved_state_clears_indicator() {
+        // AC3: borrar lo escrito devuelve el hash al del estado guardado.
+        let (mut app, _) = App::new();
+        type_char(&mut app, 'a');
+        let _ = app.update(Message::Edit(Action::Edit(Edit::Backspace)));
+        assert_eq!(app.title(), "Sin título — Mdx");
+    }
+
+    #[test]
+    fn saved_content_is_clean_and_new_edit_is_dirty_again() {
+        let (mut app, _) = App::new();
+        type_char(&mut app, 'a');
+        let info = SavedInfo {
+            path: PathBuf::from("/tmp/x.md"),
+            saved_hash: mdx_core::document::hash_text("a"),
+            mtime: None,
+        };
+        let _ = app.update(Message::Saved(Ok(info)));
+        assert_eq!(app.title(), "x.md — Mdx");
+        type_char(&mut app, 'b');
+        assert_eq!(app.title(), "● x.md — Mdx");
+    }
+
+    #[test]
+    fn discard_runs_new_and_cancel_keeps_document() {
+        let (mut app, _) = App::new();
+        type_char(&mut app, 'a');
+        let _ = app.update(Message::GuardAnswered(
+            PendingAction::New,
+            GuardChoice::Cancel,
+        ));
+        assert_eq!(app.content.text(), "a");
+        let _ = app.update(Message::GuardAnswered(
+            PendingAction::New,
+            GuardChoice::Discard,
+        ));
+        assert_eq!(app.content.text(), "");
+        assert_eq!(app.title(), "Sin título — Mdx");
+    }
+
+    #[test]
+    fn cancelling_save_dialog_clears_pending_action() {
+        let (mut app, _) = App::new();
+        type_char(&mut app, 'a');
+        let _ = app.update(Message::GuardAnswered(
+            PendingAction::Close,
+            GuardChoice::Save,
+        ));
+        assert_eq!(app.after_save, Some(PendingAction::Close));
+        let _ = app.update(Message::SavePicked(None));
+        assert_eq!(app.after_save, None);
+    }
 }
