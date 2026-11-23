@@ -68,7 +68,7 @@ flowchart LR
 | `history` | `History`, `Patch`, `offset_to_pos` | Deshacer/rehacer por diferencias (ADR 0005); sin dependencias de UI |
 | `fileops` | `validate_name`, `create_file`, `create_dir`, `rename`, `move_to_trash`, `reveal`, `rebase_path` | Operaciones sobre archivos del usuario; eliminar = papelera (`trash`), nunca `remove_*` |
 | `link` | `classify(url, base_dir) -> LinkTarget` | Enlaces de la preview: externo, Markdown local o no soportado |
-| `outline` | `extract(text) -> Outline` | `pulldown-cmark` con `into_offset_iter` para obtener la línea |
+| `outline` | `extract(text) -> Outline`, `top_level_blocks(text) -> Vec<Block>` | `pulldown-cmark` con `into_offset_iter` para obtener la línea |
 | `search` | `search_text(text, q)`, `search_workspace(root, q, cancel) -> Stream<SearchMatch>` | `regex`; cancelación con `CancellationToken` o `AtomicBool` |
 | `export` | `to_html(text, theme) -> String` | `comrak` con GFM; CSS embebido |
 | `config` | `Config`, `load()`, `save()`, migraciones | `serde` + `toml`; valida y acota |
@@ -86,11 +86,13 @@ mdx-app/src/
 │   ├── editing.rs   # edición, deshacer, guardado
 │   ├── disk.rs      # watcher, cambios externos, conflictos
 │   ├── explorer_ops.rs # árbol, menú contextual, operaciones de archivo
-│   └── preview.rs   # vista previa y enlaces
+│   ├── preview.rs   # vista previa, parseo en segundo plano y enlaces
+│   └── sync.rs      # scroll sincronizado editor → vista previa
 ├── layout.rs        # disposición del pane_grid (20/40/40), lógica pura
 ├── editor.rs        # key_binding (Tab), aplicación de parches de historial
 ├── explorer.rs      # vista del árbol de archivos y menú de filtros
 ├── outline.rs       # panel «Esquema» (encabezados del documento activo)
+├── preview_sync.rs  # medición de bloques de la preview y mapeo línea → desplazamiento
 ├── statusbar.rs     # texto de la barra de estado (línea:col, palabras, EOL, codificación)
 ├── state/
 │   ├── tabs.rs      # lógica pura de pestañas (testeable); en US-2.2 solo el modelo
@@ -221,3 +223,4 @@ Formato `docs/adr/NNNN-titulo-en-kebab.md`: **Contexto / Decisión / Alternativa
 | 0004 | Persistencia en TOML sin base de datos | Aceptado |
 | 0005 | Historial de deshacer/rehacer propio | Aceptado |
 | 0006 | Documentos abiertos: uno activo y el resto aparcados | Aceptado |
+| 0007 | Feature `advanced` de iced para el scroll sincronizado | Aceptado |

@@ -1,11 +1,64 @@
 //! Vista previa en vivo y enlaces.
 
 use super::{
-    App, LinkTarget, Message, Path, Task, initial_panes, link, markdown, panes_without_preview,
-    strings,
+    App, LinkTarget, Message, PREVIEW_DEBOUNCE, Parsed, Path, SyncScroll, Task, initial_panes,
+    link, markdown, panes_without_preview, strings,
 };
 
 impl App {
+    /// Mensajes de la vista previa: debounce, resultados del parseo y scroll sincronizado.
+    pub(super) fn update_preview(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::PreviewTick(now) => {
+                if self.preview_pending
+                    && now.saturating_duration_since(self.preview_edit_at) >= PREVIEW_DEBOUNCE
+                {
+                    return self.start_preview_parse();
+                }
+                Task::none()
+            }
+            Message::PreviewParsed(id, generation, parsed) => {
+                // Puede llegar para un documento que ya no es el activo.
+                let _ = self.with_doc(id, |app| {
+                    if generation == app.preview_gen {
+                        // Con la vista previa oculta no se parsea (items vacíos): se conserva.
+                        if app.preview_visible {
+                            app.preview = parsed.items;
+                        }
+                        app.outline = parsed.outline;
+                        app.blocks = parsed.blocks;
+                    }
+                });
+                // Nuevo contenido renderizado: se mide de nuevo (solo la pestaña activa).
+                if id == self.doc.id {
+                    self.measure_preview()
+                } else {
+                    Task::none()
+                }
+            }
+            Message::PreviewMeasured(id, layout) => {
+                if id != self.doc.id {
+                    return Task::none();
+                }
+                self.preview_layout = layout;
+                self.sync_now()
+            }
+            Message::SetSyncScroll(enabled) => {
+                self.sync = if enabled {
+                    SyncScroll::On
+                } else {
+                    SyncScroll::Off
+                };
+                if enabled {
+                    self.measure_preview()
+                } else {
+                    Task::none()
+                }
+            }
+            _ => Task::none(),
+        }
+    }
+
     /// Parsea el Markdown en un hilo aparte para no bloquear la UI con documentos grandes
     /// (NFR-4). El resultado llega como `PreviewParsed` y se ignora si ya quedó obsoleto.
     pub(super) fn start_preview_parse(&mut self) -> Task<Message> {
@@ -24,12 +77,20 @@ impl App {
                     } else {
                         Vec::new()
                     };
-                    (items, mdx_core::outline::extract(&text))
+                    Parsed {
+                        items,
+                        outline: mdx_core::outline::extract(&text),
+                        blocks: mdx_core::outline::top_level_blocks(&text),
+                    }
                 })
                 .await
-                .unwrap_or_default()
+                .unwrap_or_else(|_| Parsed {
+                    items: Vec::new(),
+                    outline: Vec::new(),
+                    blocks: Vec::new(),
+                })
             },
-            move |(items, outline)| Message::PreviewParsed(id, generation, items, outline),
+            move |parsed| Message::PreviewParsed(id, generation, parsed),
         )
     }
 

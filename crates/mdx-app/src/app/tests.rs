@@ -123,16 +123,18 @@ fn stats_follow_cursor_and_words() {
     assert_eq!((stats.line, stats.col, stats.words), (2, 2, 3));
 }
 
+fn parsed_of(text: &str) -> Parsed {
+    Parsed {
+        items: markdown::parse(text).collect(),
+        outline: mdx_core::outline::extract(text),
+        blocks: mdx_core::outline::top_level_blocks(text),
+    }
+}
+
 /// Simula la llegada del resultado del parseo en segundo plano.
 fn deliver_preview(app: &mut App) {
-    let items = markdown::parse(&app.doc.text).collect();
-    let outline = mdx_core::outline::extract(&app.doc.text);
-    let _ = app.update(Message::PreviewParsed(
-        app.doc.id,
-        app.preview_gen,
-        items,
-        outline,
-    ));
+    let parsed = parsed_of(&app.doc.text);
+    let _ = app.update(Message::PreviewParsed(app.doc.id, app.preview_gen, parsed));
 }
 
 #[test]
@@ -163,8 +165,11 @@ fn stale_preview_results_are_discarded() {
     let edited = app.preview_edit_at;
     let _ = app.update(Message::PreviewTick(edited + Duration::from_millis(150)));
     let stale = app.preview_gen - 1;
-    let items = markdown::parse("# viejo").collect();
-    let _ = app.update(Message::PreviewParsed(app.doc.id, stale, items, Vec::new()));
+    let _ = app.update(Message::PreviewParsed(
+        app.doc.id,
+        stale,
+        parsed_of("# viejo"),
+    ));
     assert!(app.preview.is_empty());
 }
 
@@ -1081,12 +1086,121 @@ fn a_stale_outline_result_is_ignored() {
     let edited = app.preview_edit_at;
     let _ = app.update(Message::PreviewTick(edited + Duration::from_millis(150)));
     let stale = app.preview_gen - 1;
-    let outline = mdx_core::outline::extract("# viejo");
     let _ = app.update(Message::PreviewParsed(
         app.doc.id,
         stale,
-        Vec::new(),
-        outline,
+        parsed_of("# viejo"),
     ));
     assert_eq!(app.outline, Vec::new());
+}
+
+// ------------------------------------------------------ US-3.3: scroll sincronizado
+
+#[test]
+fn source_blocks_match_the_preview_items_one_to_one_for_the_repo_docs() {
+    // El mapeo línea → bloque supone que `top_level_blocks` y el visor de iced coinciden.
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut files = vec![
+        root.join("README.md"),
+        root.join("CLAUDE.md"),
+        root.join("fixtures/gfm_showcase.md"),
+    ];
+    for entry in std::fs::read_dir(root.join("docs")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_some_and(|e| e == "md") {
+            files.push(path);
+        }
+    }
+    for file in files {
+        let text = std::fs::read_to_string(&file).unwrap();
+        assert_eq!(
+            markdown::parse(&text).count(),
+            mdx_core::outline::top_level_blocks(&text).len(),
+            "{}",
+            file.display()
+        );
+    }
+}
+
+fn open_long_doc(app: &mut App) {
+    let text: String = "línea\n".repeat(100);
+    let path = PathBuf::from("/proyecto/largo.md");
+    let doc = Document::from_bytes(&path, text.as_bytes(), None).unwrap();
+    let _ = app.update(Message::DocumentLoaded(Ok(doc)));
+}
+
+#[test]
+fn scrolling_the_editor_tracks_the_first_visible_line() {
+    // AC1
+    let (mut app, _) = App::new(None);
+    open_long_doc(&mut app);
+    let _ = app.update(Message::Edit(Action::Scroll { lines: 10 }));
+    assert_eq!(app.view_top.0, 10);
+    let _ = app.update(Message::Edit(Action::Scroll { lines: 25 }));
+    assert_eq!(app.view_top.0, 35);
+    // El cursor del usuario no se movió por el sondeo.
+    assert_eq!(editor::cursor_pos(&app.content), (0, 0));
+}
+
+#[test]
+fn view_top_travels_with_each_tab() {
+    let (mut app, _) = App::new(None);
+    open_long_doc(&mut app);
+    let _ = app.update(Message::Edit(Action::Scroll { lines: 20 }));
+    let a = app.doc.id;
+    let _ = open_pinned_doc(&mut app, "b.md", "corto");
+    assert_eq!(app.view_top.0, 0);
+    let _ = app.update(Message::SelectTab(a));
+    assert_eq!(app.view_top.0, 20);
+}
+
+#[test]
+fn measured_layout_is_kept_only_for_the_active_document_and_reset_on_tab_switch() {
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "uno");
+    let layout = preview_sync::Layout {
+        tops: vec![0.0],
+        content_height: 100.0,
+        viewport_height: 50.0,
+    };
+    let _ = app.update(Message::PreviewMeasured(a, layout.clone()));
+    assert_eq!(app.preview_layout, layout);
+    // Una medida de otro documento se ignora.
+    let _ = app.update(Message::PreviewMeasured(
+        DocumentId::next(),
+        preview_sync::Layout::default(),
+    ));
+    assert_eq!(app.preview_layout, layout);
+    let b = open_pinned_doc(&mut app, "b.md", "dos");
+    let _ = app.update(Message::SelectTab(a));
+    assert_eq!(
+        app.preview_layout,
+        preview_sync::Layout::default(),
+        "se vuelve a medir"
+    );
+    let _ = b;
+}
+
+#[test]
+fn sync_toggle_defaults_to_on_and_can_be_turned_off() {
+    // AC2
+    let (mut app, _) = App::new(None);
+    assert_eq!(app.sync, SyncScroll::On);
+    let _ = app.update(Message::SetSyncScroll(false));
+    assert_eq!(app.sync, SyncScroll::Off);
+    let _ = app.update(Message::SetSyncScroll(true));
+    assert_eq!(app.sync, SyncScroll::On);
+}
+
+#[test]
+fn parsed_blocks_are_stored_per_document() {
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "# Uno\n\ntexto");
+    deliver_preview(&mut app);
+    assert_eq!(app.blocks.len(), 2);
+    let _ = open_pinned_doc(&mut app, "b.md", "solo un párrafo");
+    deliver_preview(&mut app);
+    assert_eq!(app.blocks.len(), 1);
+    let _ = app.update(Message::SelectTab(a));
+    assert_eq!(app.blocks.len(), 2);
 }

@@ -71,3 +71,5 @@ pub const SIDEBAR_FILES: &str = "Archivos";
 pub const SIDEBAR_OUTLINE: &str = "Esquema";
 pub const OUTLINE_EMPTY: &str = "Sin encabezados";
 pub const OUTLINE_BLANK_HEADING: &str = "(sin texto)";
+
+pub const SYNC_SCROLL: &str = "Sincronizar scroll con el editor";

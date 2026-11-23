@@ -6,14 +6,21 @@ use super::{
 };
 
 impl App {
-    pub(super) fn handle_edit(&mut self, action: text_editor::Action) {
+    pub(super) fn handle_edit(&mut self, action: text_editor::Action) -> Task<Message> {
         if !action.is_edit() {
             // Mover el cursor o seleccionar corta la ráfaga de tecleo (el scroll no).
-            if !matches!(action, text_editor::Action::Scroll { .. }) {
+            let scrolled = matches!(action, text_editor::Action::Scroll { .. });
+            let moved = matches!(action, text_editor::Action::Move(_));
+            if !scrolled {
                 self.last_edit_at = None;
             }
             self.content.perform(action);
-            return;
+            // La rueda y el movimiento con teclado pueden desplazar la vista del editor.
+            return if scrolled || moved {
+                self.update_view_top()
+            } else {
+                Task::none()
+            };
         }
         // Editar fija la pestaña «preview» (así nunca se reemplaza una con cambios).
         self.tabs.pin(self.doc.id);
@@ -30,10 +37,12 @@ impl App {
             .record(&old, &self.doc.text, before, after, mergeable);
         self.last_edit_at = editor::is_mergeable(&action).then(Instant::now);
         self.refresh_stats();
+        // Escribir puede desplazar el editor hasta el cursor.
+        self.update_view_top()
     }
 
     /// Mueve el cursor al inicio de `line` (base 0) y lo deja visible (clic en el esquema).
-    pub(super) fn go_to_line(&mut self, line: usize) {
+    pub(super) fn go_to_line(&mut self, line: usize) -> Task<Message> {
         let line = line.min(self.content.line_count().saturating_sub(1));
         self.last_edit_at = None;
         self.content.move_to(text_editor::Cursor {
@@ -43,6 +52,7 @@ impl App {
         // Una acción de movimiento hace que el editor desplace la vista hasta el cursor.
         self.content
             .perform(text_editor::Action::Move(text_editor::Motion::Home));
+        self.update_view_top()
     }
 
     pub(super) fn undo_redo(&mut self, undo: bool) {
