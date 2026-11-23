@@ -123,7 +123,7 @@ Decisiones:
 - Con `mdx <ruta>` que no existe, se muestra el error de lectura en la barra de estado.
 - Verificación 👁 AC1 y AC6 confirmada manualmente por el propietario el 2026-11-23.
 
-## US-2.2 Navegación — 🟡 implementada, pendiente verificación 👁 AC1–AC3 (rama feat/us-2.2-navegacion)
+## US-2.2 Navegación — ✅ completa (rama feat/us-2.2-navegacion)
 Plan: `mdx-app/src/state/tabs.rs` (modelo INV-7), `explorer.rs` (vista, resalte, navegación pura), `app.rs` (clic, doble clic, teclas, `pin_on_load`), `mdx-core::workspace::visible_nodes`.
 - AC1 🧪 `state::tabs::tests::*` (INV-7: nunca más de una pestaña sin fijar), `app::tests::single_clicks_reuse_one_preview_tab`, `double_click_pins_the_opened_file`, `double_click_on_open_preview_pins_it_without_reloading`, `clicking_a_file_with_unsaved_changes_does_not_discard_them`. 👁 pendiente.
 - AC2 🧪 `explorer::tests::*` (↑/↓ con tope, → expande y entra, ← colapsa y sube al padre, Enter abre/alterna), `app::tests::keyboard_navigation_moves_selection_and_toggles`. 👁 pendiente.
@@ -135,3 +135,4 @@ Decisiones:
 - Teclado del árbol: la suscripción global solo reenvía flechas/Enter si ningún widget los consumió (`status == Ignored`), así el editor enfocado conserva sus flechas. Sin selección: ↓ primera fila, ↑ última.
 - Pendiente de verificar a mano: que tras hacer clic en el explorador el editor pierda el foco y las flechas muevan el árbol.
 - `Tabs::{tabs, active, is_pinned}` llevan `#[allow(dead_code)]` hasta que la use US-3.1.
+- Verificación 👁 AC1–AC3 confirmada manualmente por el propietario el 2026-11-23.
