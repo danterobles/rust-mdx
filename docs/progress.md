@@ -72,3 +72,19 @@ Decisiones:
 - Palabras = secuencias separadas por espacios en blanco; se recalculan en cada edición (O(n)). **Medir en NFR-4 (1 MB)** al cierre de F1.
 - Columna mostrada en caracteres (no bytes).
 - Verificación 👁 AC1–AC5 confirmada manualmente por el propietario el 2026-11-23.
+
+## US-1.4 Vista previa en vivo — ✅ completa (rama feat/us-1.4-preview)
+Plan: `mdx-core::link` (clasificación de enlaces), `mdx-app` (`app.rs`: preview, debounce, enlaces, toggle; `layout.rs`; `shortcuts.rs`), `fixtures/gfm_showcase.md`.
+- AC1 🧪 `app::tests::preview_updates_only_after_debounce`, `loaded_document_renders_preview_immediately`; 👁 pendiente. Debounce: `time::every(25 ms)` solo mientras `preview_pending`; re-parsea cuando `now - última edición ≥ 150 ms` (ARCHITECTURE decía 50 ms de tick: se bajó a 25 ms para quedar más cerca de «≤ 150 ms»).
+- AC2 👁 `iced::widget::markdown` (pulldown-cmark con tablas, tachado y listas de tareas activados por iced); código resaltado vía feature `highlighter`. Verificar con `fixtures/gfm_showcase.md`.
+- AC3 🧪 `link::tests::*` (http/https externos, relativos con `../`, `#ancla`, `%20`, esquemas no soportados), `app::tests::unsupported_link_reports_error_and_keeps_document`; 👁 apertura real en navegador/editor. Los `.md` relativos pasan por el diálogo de cambios sin guardar (`PendingAction::OpenPath`).
+- AC4 🧪 `shortcuts::tests::maps_toggle_preview_by_physical_key`, `app::tests::toggle_preview_hides_and_restores_pane`; 👁 pendiente.
+Decisiones:
+- **Tablas sí soportadas** por el widget `markdown` de iced 0.14: no hizo falta ADR ni widget propio.
+- Ctrl/Cmd+\ se detecta por **tecla física** (`Code::Backslash`) porque en teclados como el español `\` requiere Alt.
+- Ocultar la vista previa reconstruye el layout (Explorador 20 % · Editor 80 %); al mostrarla se restaura 20/40/40. Los anchos arrastrados por el usuario no se recuerdan (podría guardarse con la sesión en US-3.5).
+- La preview se re-parsea completa en cada pausa (el parseo incremental de iced solo sirve para añadir al final). **Medir en NFR-4 (1 MB)**; si no es fluido, mover el parseo a un `Task`.
+- `open::that_detached` se ejecuta dentro de un `Task` (no en `update`).
+- Enlaces a `.md` relativos requieren que el documento tenga ruta; sin ruta se informa «Enlace no soportado».
+- Imágenes: fuera de esta historia (US-4.4).
+- Verificación 👁 AC1–AC4 confirmada manualmente por el propietario el 2026-11-23.

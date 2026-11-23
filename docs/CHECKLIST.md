@@ -67,10 +67,10 @@
 - [x] AC5 Barra de estado (línea:col, palabras, EOL, codificación) 🧪 conteo + 👁
 
 ### US-1.4 Vista previa
-- [ ] AC1 Debounce ≤ 150 ms 👁
-- [ ] AC2 Elementos CommonMark + GFM 👁 (fixture `fixtures/gfm_showcase.md`)
-- [ ] AC3 Enlaces externos y relativos 👁
-- [ ] AC4 Ctrl/Cmd+\ alterna preview 👁
+- [x] AC1 Debounce ≤ 150 ms 👁
+- [x] AC2 Elementos CommonMark + GFM 👁 (fixture `fixtures/gfm_showcase.md`)
+- [x] AC3 Enlaces externos y relativos 👁
+- [x] AC4 Ctrl/Cmd+\ alterna preview 👁
 
 - [ ] **Hito F1**: editar el README del repo sin pérdida de datos 👁
 
