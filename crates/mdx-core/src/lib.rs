@@ -11,6 +11,7 @@ pub mod error;
 pub mod history;
 pub mod io;
 pub mod link;
+pub mod workspace;
 
 pub use document::{DiskState, Document, DocumentId, LineEnding};
 pub use error::CoreError;

@@ -82,6 +82,7 @@ mdx-app/src/
 ├── app.rs           # State, Message, update, view, subscription (orquestador)
 ├── layout.rs        # disposición del pane_grid (20/40/40), lógica pura
 ├── editor.rs        # key_binding (Tab), aplicación de parches de historial
+├── explorer.rs      # vista del árbol de archivos y menú de filtros
 ├── statusbar.rs     # texto de la barra de estado (línea:col, palabras, EOL, codificación)
 ├── state/
 │   ├── tabs.rs      # lógica pura de pestañas (testeable)

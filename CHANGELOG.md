@@ -10,6 +10,10 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 
 ## [Unreleased]
 
+### Added
+- Explorador de archivos: abrir carpeta con Ctrl/Cmd+Shift+O o `mdx <ruta>`, árbol con carga perezosa, orden carpetas primero, y filtros de archivos ocultos, `.gitignore` y solo Markdown (clic derecho en el panel) [US-2.1]
+- Abrir un archivo desde la línea de comandos con `mdx <ruta>` [US-2.1]
+
 ## [0.2.0] - 2026-11-23
 
 ### Added

@@ -12,15 +12,18 @@ use mdx_core::document::count_words;
 use mdx_core::history::History;
 use mdx_core::io::SavedInfo;
 use mdx_core::link::{self, LinkTarget};
+use mdx_core::workspace::{self, FileNode, TreeFilters, Workspace};
 use mdx_core::{CoreError, Document};
 
 use crate::editor;
+use crate::explorer::{self, ExplorerState};
 use crate::layout::{PaneKind, initial_panes, panes_without_preview};
 use crate::shortcuts::{self, ShortcutAction};
 use crate::statusbar::{Stats, display_col};
 use crate::strings;
 
 pub struct App {
+    explorer: ExplorerState,
     panes: pane_grid::State<PaneKind>,
     doc: Document,
     content: text_editor::Content,
@@ -59,6 +62,14 @@ pub enum PendingAction {
     OpenPath(PathBuf),
 }
 
+/// Filtros del explorador que el usuario puede alternar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FilterKind {
+    Hidden,
+    Gitignore,
+    OnlyMarkdown,
+}
+
 /// Respuesta del usuario al diálogo de cambios sin guardar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GuardChoice {
@@ -84,15 +95,40 @@ pub enum Message {
     CloseRequested,
     GuardAnswered(PendingAction, GuardChoice),
     PreviewTick(Instant),
+    FolderPicked(Option<PathBuf>),
+    WorkspaceOpened(Result<Workspace, CoreError>),
+    ToggleDir(PathBuf),
+    DirLoaded(PathBuf, Result<Vec<FileNode>, CoreError>),
+    ToggleExplorerMenu,
+    ToggleFilter(FilterKind),
     PreviewParsed(u64, Vec<markdown::Item>),
     LinkClicked(String),
     LinkOpened(Result<(), String>),
 }
 
 impl App {
-    pub fn new() -> (Self, Task<Message>) {
+    /// Crea la app. `arg` es la ruta opcional recibida por CLI (`mdx <ruta>`): una carpeta se
+    /// abre como workspace y un archivo se abre en el editor.
+    pub fn new(arg: Option<PathBuf>) -> (Self, Task<Message>) {
+        let filters = TreeFilters::default();
+        let boot = match arg {
+            Some(path) if path.is_dir() => Task::perform(
+                workspace::open_async(path, filters),
+                Message::WorkspaceOpened,
+            ),
+            Some(path) => Task::perform(
+                async move { mdx_core::io::read_document(&path).await },
+                Message::DocumentLoaded,
+            ),
+            None => Task::none(),
+        };
         (
             Self {
+                explorer: ExplorerState {
+                    workspace: None,
+                    filters,
+                    menu_open: false,
+                },
                 panes: initial_panes(),
                 doc: Document::untitled(),
                 content: text_editor::Content::new(),
@@ -108,7 +144,7 @@ impl App {
                 preview_pending: false,
                 preview_edit_at: Instant::now(),
             },
-            Task::none(),
+            boot,
         )
     }
 
@@ -164,7 +200,7 @@ impl App {
                 async move { mdx_core::io::read_document(&path).await },
                 Message::DocumentLoaded,
             ),
-            Message::FilePicked(None) => Task::none(),
+            Message::FilePicked(None) | Message::FolderPicked(None) => Task::none(),
             Message::DocumentLoaded(result) => self.handle_loaded(result),
             Message::SavePicked(Some(path)) => self.save_to(path),
             Message::SavePicked(None) => {
@@ -187,6 +223,33 @@ impl App {
                 }
                 Task::none()
             }
+            Message::FolderPicked(Some(path)) => Task::perform(
+                workspace::open_async(path, self.explorer.filters),
+                Message::WorkspaceOpened,
+            ),
+            Message::WorkspaceOpened(result) => {
+                match result {
+                    Ok(ws) => {
+                        let msg = format!("{}: {}", strings::STATUS_FOLDER_OPENED, ws.tree.name);
+                        self.explorer.workspace = Some(ws);
+                        self.set_status(msg, false);
+                    }
+                    Err(err) => self.set_status(err.to_string(), true),
+                }
+                Task::none()
+            }
+            Message::ToggleDir(path) => self.toggle_dir(&path),
+            Message::DirLoaded(path, result) => {
+                if let Some(ws) = &mut self.explorer.workspace {
+                    ws.set_children(&path, result);
+                }
+                Task::none()
+            }
+            Message::ToggleExplorerMenu => {
+                self.explorer.menu_open = !self.explorer.menu_open;
+                Task::none()
+            }
+            Message::ToggleFilter(kind) => self.toggle_filter(kind),
             Message::LinkClicked(url) => self.handle_link(&url),
             Message::LinkOpened(result) => {
                 if let Err(err) = result {
@@ -209,6 +272,7 @@ impl App {
         match action {
             ShortcutAction::New => self.request(PendingAction::New),
             ShortcutAction::Open => self.request(PendingAction::Open),
+            ShortcutAction::OpenFolder => Task::perform(pick_folder(), Message::FolderPicked),
             ShortcutAction::Save => self.save(),
             ShortcutAction::SaveAs => self.save_as(),
             ShortcutAction::Undo => {
@@ -325,6 +389,46 @@ impl App {
                     .unwrap_or_default()
             },
             move |items| Message::PreviewParsed(generation, items),
+        )
+    }
+
+    fn toggle_dir(&mut self, path: &Path) -> Task<Message> {
+        let filters = self.explorer.filters;
+        let Some(ws) = &mut self.explorer.workspace else {
+            return Task::none();
+        };
+        let expanded = matches!(
+            ws.node(path).map(|n| &n.kind),
+            Some(mdx_core::workspace::NodeKind::Dir { expanded: true, .. })
+        );
+        if expanded {
+            ws.collapse(path);
+            return Task::none();
+        }
+        if ws.begin_expand(path) {
+            let dir = path.to_path_buf();
+            return Task::perform(
+                workspace::load_children_async(dir.clone(), filters),
+                move |result| Message::DirLoaded(dir.clone(), result),
+            );
+        }
+        Task::none()
+    }
+
+    /// Cambia un filtro y recarga la raíz (el árbol vuelve a colapsarse).
+    fn toggle_filter(&mut self, kind: FilterKind) -> Task<Message> {
+        let filters = &mut self.explorer.filters;
+        match kind {
+            FilterKind::Hidden => filters.show_hidden = !filters.show_hidden,
+            FilterKind::Gitignore => filters.respect_gitignore = !filters.respect_gitignore,
+            FilterKind::OnlyMarkdown => filters.only_markdown = !filters.only_markdown,
+        }
+        let Some(ws) = &self.explorer.workspace else {
+            return Task::none();
+        };
+        Task::perform(
+            workspace::open_async(ws.root.clone(), self.explorer.filters),
+            Message::WorkspaceOpened,
         )
     }
 
@@ -452,7 +556,11 @@ impl App {
         let theme = self.theme();
         let grid = pane_grid(&self.panes, |_, kind, _| {
             let body: Element<'_, Message> = match kind {
-                PaneKind::Explorer => text(strings::PANE_EXPLORER).into(),
+                PaneKind::Explorer => explorer::view(
+                    self.explorer.workspace.as_ref(),
+                    self.explorer.filters,
+                    self.explorer.menu_open,
+                ),
                 PaneKind::Editor => text_editor(&self.content)
                     .on_action(Message::Edit)
                     .key_binding(editor::key_binding)
@@ -495,6 +603,14 @@ impl App {
 
         Column::new().push(grid).push(status_bar).into()
     }
+}
+
+async fn pick_folder() -> Option<PathBuf> {
+    rfd::AsyncFileDialog::new()
+        .set_title(strings::DIALOG_FOLDER_TITLE)
+        .pick_folder()
+        .await
+        .map(|h| h.path().to_path_buf())
 }
 
 async fn pick_file_to_open() -> Option<PathBuf> {
@@ -554,14 +670,14 @@ mod tests {
 
     #[test]
     fn starts_clean_and_untitled() {
-        let (app, _) = App::new();
+        let (app, _) = App::new(None);
         assert_eq!(app.title(), "Sin título — Mdx");
     }
 
     #[test]
     fn editing_marks_dirty_in_title() {
         // AC1
-        let (mut app, _) = App::new();
+        let (mut app, _) = App::new(None);
         type_char(&mut app, 'a');
         assert_eq!(app.title(), "● Sin título — Mdx");
     }
@@ -569,7 +685,7 @@ mod tests {
     #[test]
     fn returning_to_saved_state_clears_indicator() {
         // AC3: borrar lo escrito devuelve el hash al del estado guardado.
-        let (mut app, _) = App::new();
+        let (mut app, _) = App::new(None);
         type_char(&mut app, 'a');
         let _ = app.update(Message::Edit(Action::Edit(Edit::Backspace)));
         assert_eq!(app.title(), "Sin título — Mdx");
@@ -577,7 +693,7 @@ mod tests {
 
     #[test]
     fn saved_content_is_clean_and_new_edit_is_dirty_again() {
-        let (mut app, _) = App::new();
+        let (mut app, _) = App::new(None);
         type_char(&mut app, 'a');
         let info = SavedInfo {
             path: PathBuf::from("/tmp/x.md"),
@@ -592,7 +708,7 @@ mod tests {
 
     #[test]
     fn discard_runs_new_and_cancel_keeps_document() {
-        let (mut app, _) = App::new();
+        let (mut app, _) = App::new(None);
         type_char(&mut app, 'a');
         let _ = app.update(Message::GuardAnswered(
             PendingAction::New,
@@ -610,7 +726,7 @@ mod tests {
     #[test]
     fn undo_and_redo_typing_burst() {
         // AC3: una ráfaga de tecleo es un solo paso.
-        let (mut app, _) = App::new();
+        let (mut app, _) = App::new(None);
         for c in "hola".chars() {
             type_char(&mut app, c);
         }
@@ -624,7 +740,7 @@ mod tests {
 
     #[test]
     fn undo_restores_cursor_and_edit_after_undo_drops_redo() {
-        let (mut app, _) = App::new();
+        let (mut app, _) = App::new(None);
         for c in "ab".chars() {
             type_char(&mut app, c);
         }
@@ -643,7 +759,7 @@ mod tests {
     #[test]
     fn indent_and_unindent_selection() {
         // AC4: con la línea seleccionada, Tab la indenta y Shift+Tab la desindenta.
-        let (mut app, _) = App::new();
+        let (mut app, _) = App::new(None);
         type_char(&mut app, 'a');
         let _ = app.update(Message::Edit(Action::SelectAll));
         let _ = app.update(Message::Edit(Action::Edit(Edit::Indent)));
@@ -656,7 +772,7 @@ mod tests {
     #[test]
     fn stats_follow_cursor_and_words() {
         // AC5
-        let (mut app, _) = App::new();
+        let (mut app, _) = App::new(None);
         for c in "uno dos".chars() {
             type_char(&mut app, c);
         }
@@ -675,7 +791,7 @@ mod tests {
     #[test]
     fn preview_updates_only_after_debounce() {
         // AC1: el re-parseo se lanza ≥150 ms después de la última edición.
-        let (mut app, _) = App::new();
+        let (mut app, _) = App::new(None);
         for c in "# T".chars() {
             type_char(&mut app, c);
         }
@@ -695,7 +811,7 @@ mod tests {
 
     #[test]
     fn stale_preview_results_are_discarded() {
-        let (mut app, _) = App::new();
+        let (mut app, _) = App::new(None);
         type_char(&mut app, 'a');
         let edited = app.preview_edit_at;
         let _ = app.update(Message::PreviewTick(edited + Duration::from_millis(150)));
@@ -708,7 +824,7 @@ mod tests {
     #[test]
     fn loaded_document_starts_preview_parse() {
         let doc = Document::from_bytes(Path::new("a.md"), b"# Hola\n\ntexto", None).unwrap();
-        let (mut app, _) = App::new();
+        let (mut app, _) = App::new(None);
         let before = app.preview_gen;
         let _ = app.update(Message::DocumentLoaded(Ok(doc)));
         assert_eq!(app.preview_gen, before + 1);
@@ -720,7 +836,7 @@ mod tests {
     #[test]
     fn toggle_preview_hides_and_restores_pane() {
         // AC4
-        let (mut app, _) = App::new();
+        let (mut app, _) = App::new(None);
         assert_eq!(app.panes.len(), 3);
         let _ = app.update(Message::Shortcut(ShortcutAction::TogglePreview));
         assert!(!app.preview_visible);
@@ -732,7 +848,7 @@ mod tests {
     #[test]
     fn unsupported_link_reports_error_and_keeps_document() {
         // AC3
-        let (mut app, _) = App::new();
+        let (mut app, _) = App::new(None);
         type_char(&mut app, 'a');
         let _ = app.update(Message::LinkClicked("mailto:a@b.c".into()));
         assert!(app.status.as_ref().is_some_and(|s| s.is_error));
@@ -751,7 +867,7 @@ mod tests {
                 .join(name);
             let bytes = std::fs::read(&path).expect("ejecuta `cargo xtask gen-fixtures`");
             let doc = Document::from_bytes(&path, &bytes, None).unwrap();
-            let (mut app, _) = App::new();
+            let (mut app, _) = App::new(None);
             let t = Instant::now();
             let _ = app.update(Message::DocumentLoaded(Ok(doc)));
             let load_ms = t.elapsed().as_millis();
@@ -788,9 +904,85 @@ mod tests {
         }
     }
 
+    fn temp_workspace() -> (tempfile::TempDir, Workspace) {
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::create_dir_all(dir.path().join("sub")).unwrap();
+        std::fs::write(dir.path().join("sub/a.md"), "x").unwrap();
+        std::fs::write(dir.path().join("r.md"), "x").unwrap();
+        let ws = Workspace::open(dir.path(), TreeFilters::default()).unwrap();
+        (dir, ws)
+    }
+
+    #[test]
+    fn workspace_opened_is_stored() {
+        // AC1 (lógica): al abrir una carpeta queda el árbol cargado.
+        let (_dir, ws) = temp_workspace();
+        let (mut app, _) = App::new(None);
+        let _ = app.update(Message::WorkspaceOpened(Ok(ws)));
+        assert!(app.explorer.workspace.is_some());
+        assert!(app.status.as_ref().is_some_and(|s| !s.is_error));
+    }
+
+    #[test]
+    fn toggle_dir_loads_lazily_then_collapses() {
+        // AC2
+        let (_dir, ws) = temp_workspace();
+        let sub = ws.root.join("sub");
+        let (mut app, _) = App::new(None);
+        let _ = app.update(Message::WorkspaceOpened(Ok(ws)));
+        let state = |app: &App, p: &Path| app.explorer.workspace.as_ref().unwrap().node(p).cloned();
+
+        let _ = app.update(Message::ToggleDir(sub.clone()));
+        let node = state(&app, &sub).unwrap();
+        assert!(matches!(
+            node.kind,
+            mdx_core::workspace::NodeKind::Dir {
+                children: mdx_core::workspace::Children::Loading,
+                expanded: true
+            }
+        ));
+
+        let kids = workspace::load_children(&sub, &TreeFilters::default());
+        let _ = app.update(Message::DirLoaded(sub.clone(), kids));
+        assert!(state(&app, &sub.join("a.md")).is_some());
+
+        let _ = app.update(Message::ToggleDir(sub.clone()));
+        assert!(matches!(
+            state(&app, &sub).unwrap().kind,
+            mdx_core::workspace::NodeKind::Dir {
+                expanded: false,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn toggling_filters_updates_flags() {
+        // AC3 / AC4
+        let (mut app, _) = App::new(None);
+        assert!(app.explorer.filters.only_markdown && !app.explorer.filters.show_hidden);
+        let _ = app.update(Message::ToggleFilter(FilterKind::OnlyMarkdown));
+        let _ = app.update(Message::ToggleFilter(FilterKind::Hidden));
+        let _ = app.update(Message::ToggleFilter(FilterKind::Gitignore));
+        let f = app.explorer.filters;
+        assert!(!f.only_markdown && f.show_hidden && !f.respect_gitignore);
+        let _ = app.update(Message::ToggleExplorerMenu);
+        assert!(app.explorer.menu_open);
+    }
+
+    #[test]
+    fn failed_workspace_open_reports_error() {
+        let (mut app, _) = App::new(None);
+        let _ = app.update(Message::WorkspaceOpened(Err(CoreError::NotFound(
+            PathBuf::from("/x"),
+        ))));
+        assert!(app.explorer.workspace.is_none());
+        assert!(app.status.as_ref().is_some_and(|s| s.is_error));
+    }
+
     #[test]
     fn cancelling_save_dialog_clears_pending_action() {
-        let (mut app, _) = App::new();
+        let (mut app, _) = App::new(None);
         type_char(&mut app, 'a');
         let _ = app.update(Message::GuardAnswered(
             PendingAction::Close,

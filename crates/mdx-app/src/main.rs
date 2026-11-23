@@ -2,6 +2,7 @@
 
 mod app;
 mod editor;
+mod explorer;
 mod layout;
 mod shortcuts;
 mod statusbar;
@@ -16,12 +17,18 @@ fn main() -> Result<()> {
         .init();
     tracing::info!(version = mdx_core::version(), "Mdx iniciado");
 
-    iced::application(app::App::new, app::App::update, app::App::view)
-        .title(app::App::title)
-        .theme(app::App::theme)
-        .subscription(app::App::subscription)
-        .exit_on_close_request(false)
-        .window_size((1200.0, 750.0))
-        .run()?;
+    // `mdx <ruta>`: carpeta (workspace) o archivo.
+    let arg = std::env::args_os().nth(1).map(std::path::PathBuf::from);
+    iced::application(
+        move || app::App::new(arg.clone()),
+        app::App::update,
+        app::App::view,
+    )
+    .title(app::App::title)
+    .theme(app::App::theme)
+    .subscription(app::App::subscription)
+    .exit_on_close_request(false)
+    .window_size((1200.0, 750.0))
+    .run()?;
     Ok(())
 }

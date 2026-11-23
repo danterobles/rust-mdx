@@ -2,7 +2,6 @@
 
 pub const APP_TITLE: &str = "Mdx";
 pub const UNTITLED: &str = "Sin título";
-pub const PANE_EXPLORER: &str = "Explorador";
 
 pub const FILTER_MARKDOWN: &str = "Markdown y texto";
 pub const FILTER_ALL: &str = "Todos los archivos";
@@ -29,3 +28,12 @@ pub const ENCODING_UTF8: &str = "UTF-8";
 pub const ENCODING_UTF8_BOM: &str = "UTF-8 con BOM";
 
 pub const STATUS_LINK_UNSUPPORTED: &str = "Enlace no soportado: {url}";
+
+pub const DIALOG_FOLDER_TITLE: &str = "Abrir carpeta";
+pub const STATUS_FOLDER_OPENED: &str = "Carpeta abierta";
+pub const EXPLORER_EMPTY: &str = "Sin carpeta abierta.\nUse Ctrl/Cmd+Shift+O para abrir una.";
+pub const EXPLORER_LOADING: &str = "Cargando…";
+pub const EXPLORER_EMPTY_DIR: &str = "(vacía)";
+pub const FILTER_HIDDEN: &str = "Mostrar archivos ocultos";
+pub const FILTER_GITIGNORE: &str = "Respetar .gitignore";
+pub const FILTER_ONLY_MARKDOWN: &str = "Solo archivos Markdown";

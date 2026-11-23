@@ -8,6 +8,7 @@ use iced::keyboard::{Key, Modifiers};
 pub enum ShortcutAction {
     New,
     Open,
+    OpenFolder,
     Save,
     SaveAs,
     Undo,
@@ -35,6 +36,7 @@ pub fn map(key: &Key, physical: Physical, modifiers: Modifiers) -> Option<Shortc
     match (letter.to_ascii_lowercase(), modifiers.shift()) {
         ('n', false) => Some(ShortcutAction::New),
         ('o', false) => Some(ShortcutAction::Open),
+        ('o', true) => Some(ShortcutAction::OpenFolder),
         ('s', false) => Some(ShortcutAction::Save),
         ('s', true) => Some(ShortcutAction::SaveAs),
         ('z', false) => Some(ShortcutAction::Undo),
@@ -59,6 +61,10 @@ mod tests {
         let cmd = Modifiers::COMMAND;
         assert_eq!(press("n", Code::KeyN, cmd), Some(ShortcutAction::New));
         assert_eq!(press("o", Code::KeyO, cmd), Some(ShortcutAction::Open));
+        assert_eq!(
+            press("O", Code::KeyO, cmd | Modifiers::SHIFT),
+            Some(ShortcutAction::OpenFolder)
+        );
         assert_eq!(press("s", Code::KeyS, cmd), Some(ShortcutAction::Save));
         assert_eq!(
             press("S", Code::KeyS, cmd | Modifiers::SHIFT),

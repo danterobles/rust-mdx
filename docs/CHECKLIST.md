@@ -77,12 +77,12 @@
 ## Fase 2 — Explorador → v0.3.0
 
 ### US-2.1 Abrir carpeta
-- [ ] AC1 Ctrl/Cmd+Shift+O y argumento CLI 👁
-- [ ] AC2 Carga perezosa 🧪
-- [ ] AC3 `.gitignore` y ocultos 🧪
-- [ ] AC4 Filtro solo Markdown 🧪
-- [ ] AC5 Orden dirs→archivos, alfabético 🧪 (INV-4)
-- [ ] AC6 10 000 archivos sin bloquear UI 🧪 (ignored) + 👁
+- [x] AC1 Ctrl/Cmd+Shift+O y argumento CLI 👁
+- [x] AC2 Carga perezosa 🧪 — `workspace::tests::loading_is_lazy_one_level_only`, `app::tests::toggle_dir_loads_lazily_then_collapses`
+- [x] AC3 `.gitignore` y ocultos 🧪 — `workspace::tests::gitignore_is_respected_and_togglable`, `hidden_files_toggle` (toggle en menú de clic derecho del panel, 👁 en progress.md)
+- [x] AC4 Filtro solo Markdown 🧪 — `workspace::tests::only_markdown_filter_keeps_all_dirs`
+- [x] AC5 Orden dirs→archivos, alfabético 🧪 (INV-4) — `workspace::tests::sort_order_dirs_first_then_case_insensitive`
+- [x] AC6 10 000 archivos sin bloquear UI 🧪 (ignored) + 👁 — `workspace::tests::perf_ten_thousand_files` (15 ms en release)
 
 ### US-2.2 Navegación
 - [ ] AC1 Clic simple / doble clic 👁 + 🧪 (INV-7)
