@@ -55,8 +55,57 @@ impl App {
                     Task::none()
                 }
             }
+            Message::ExportHtml => self.export_html(),
+            Message::HtmlExportPicked(Some((path, text, title))) => Task::perform(
+                async move {
+                    mdx_core::export::export_to_file(path.clone(), text, title)
+                        .await
+                        .map(|()| path)
+                },
+                Message::HtmlExported,
+            ),
+            Message::HtmlExported(result) => {
+                match result {
+                    Ok(path) => self.set_status(
+                        format!("{}: {}", strings::STATUS_EXPORTED, path.display()),
+                        false,
+                    ),
+                    Err(err) => self.set_status(err.to_string(), true),
+                }
+                Task::none()
+            }
             _ => Task::none(),
         }
+    }
+
+    /// Pide dónde guardar y exporta el texto **actual** del documento activo (con sus cambios
+    /// sin guardar) a un `.html` autocontenido.
+    pub(super) fn export_html(&self) -> Task<Message> {
+        let title = self.doc.display_name(strings::UNTITLED);
+        let stem = self
+            .doc
+            .path
+            .as_deref()
+            .and_then(Path::file_stem)
+            .map_or_else(
+                || strings::UNTITLED.to_owned(),
+                |s| s.to_string_lossy().into_owned(),
+            );
+        let dir = self
+            .doc
+            .path
+            .as_deref()
+            .and_then(Path::parent)
+            .map(Path::to_path_buf);
+        let text = self.content.text();
+        Task::perform(
+            async move {
+                super::editing::pick_html_save(format!("{stem}.html"), dir)
+                    .await
+                    .map(|path| (path, text, title))
+            },
+            Message::HtmlExportPicked,
+        )
     }
 
     /// Parsea el Markdown en un hilo aparte para no bloquear la UI con documentos grandes

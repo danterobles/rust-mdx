@@ -300,3 +300,14 @@ pub(super) async fn ask_unsaved(name: String) -> GuardChoice {
         _ => GuardChoice::Cancel,
     }
 }
+
+pub(super) async fn pick_html_save(suggested: String, dir: Option<PathBuf>) -> Option<PathBuf> {
+    let mut dialog = rfd::AsyncFileDialog::new()
+        .set_title(strings::DIALOG_EXPORT_TITLE)
+        .set_file_name(suggested)
+        .add_filter(strings::FILTER_HTML, &["html"]);
+    if let Some(dir) = dir {
+        dialog = dialog.set_directory(dir);
+    }
+    dialog.save_file().await.map(|h| h.path().to_path_buf())
+}

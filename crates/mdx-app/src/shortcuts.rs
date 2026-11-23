@@ -15,6 +15,8 @@ pub enum ShortcutAction {
     Redo,
     TogglePreview,
     CloseTab,
+    /// Exportar el documento a un archivo HTML.
+    ExportHtml,
     /// Aumentar, reducir o restablecer el zoom del editor y la vista previa.
     ZoomIn,
     ZoomOut,
@@ -108,6 +110,7 @@ pub fn map(key: &Key, physical: Physical, modifiers: Modifiers) -> Option<Shortc
         ('s', true) => Some(ShortcutAction::SaveAs),
         ('w', false) => Some(ShortcutAction::CloseTab),
         (',', false) => Some(ShortcutAction::OpenConfig),
+        ('e', true) => Some(ShortcutAction::ExportHtml),
         // `+` suele exigir Shift; `=` es la misma tecla sin él.
         ('+' | '=', _) => Some(ShortcutAction::ZoomIn),
         ('-' | '_', _) => Some(ShortcutAction::ZoomOut),
@@ -211,6 +214,17 @@ mod tests {
             map(&tab, Physical::Code(Code::Tab), Modifiers::empty()),
             None
         );
+    }
+
+    #[test]
+    fn maps_the_export_shortcut() {
+        // AC1
+        let cmd = Modifiers::COMMAND;
+        assert_eq!(
+            press("E", Code::KeyE, cmd | Modifiers::SHIFT),
+            Some(ShortcutAction::ExportHtml)
+        );
+        assert_eq!(press("e", Code::KeyE, cmd), None);
     }
 
     #[test]

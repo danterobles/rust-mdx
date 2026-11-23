@@ -1,0 +1,57 @@
+---
+source: crates/mdx-core/src/export.rs
+expression: body_html(SHOWCASE)
+---
+<h1 id="título-principal">Título principal<a href="#título-principal" aria-label="Link to heading 'Título principal'" data-heading-content="Título principal" class="anchor"></a></h1>
+<p>Texto con <em>cursiva</em>, <strong>negrita</strong>, <del>tachado</del>, <code>código</code> y un <a href="https://example.com">enlace</a>.
+Autoenlace: <a href="https://www.rust-lang.org">https://www.rust-lang.org</a></p>
+<h2 id="listas">Listas<a href="#listas" aria-label="Link to heading 'Listas'" data-heading-content="Listas" class="anchor"></a></h2>
+<ul>
+<li>uno</li>
+<li>dos
+<ul>
+<li>anidado</li>
+</ul>
+</li>
+</ul>
+<ol>
+<li>primero</li>
+<li>segundo</li>
+</ol>
+<ul>
+<li><input type="checkbox" checked="" disabled="" /> tarea hecha</li>
+<li><input type="checkbox" disabled="" /> tarea pendiente</li>
+</ul>
+<blockquote>
+<p>Una cita
+en dos líneas.</p>
+</blockquote>
+<pre><code class="language-rust">fn main() {
+    println!(&quot;Hola &lt;mundo&gt; &amp; compañía&quot;);
+}
+</code></pre>
+<table>
+<thead>
+<tr>
+<th align="left">A</th>
+<th align="right">B</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left">1</td>
+<td align="right">2</td>
+</tr>
+</tbody>
+</table>
+<p>Nota al pie<sup class="footnote-ref"><a href="#fn-1" id="fnref-1" data-footnote-ref>1</a></sup>.</p>
+<hr />
+<p>HTML crudo: <!-- raw HTML omitted -->alert(1)<!-- raw HTML omitted --> y <!-- raw HTML omitted -->negrita<!-- raw HTML omitted -->.</p>
+<p><a href="">peligroso</a></p>
+<section class="footnotes" data-footnotes>
+<ol>
+<li id="fn-1">
+<p>Texto de la nota. <a href="#fnref-1" class="footnote-backref" data-footnote-backref data-footnote-backref-idx="1" aria-label="Back to reference 1">↩</a></p>
+</li>
+</ol>
+</section>
