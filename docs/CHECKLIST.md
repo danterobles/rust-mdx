@@ -46,10 +46,10 @@
 ## Fase 1 — MVP del editor → v0.2.0
 
 ### US-1.1 Nuevo / Abrir / Guardar
-- [~] AC1 Ctrl/Cmd+N 👁 (🧪 mapeo en `shortcuts::tests`; verificación visual pendiente)
-- [~] AC2 Ctrl/Cmd+O con filtro 👁 (verificación visual pendiente; opción "Todos" a confirmar en macOS)
-- [~] AC3 Ctrl/Cmd+S (y Guardar como si no hay ruta) 👁 (verificación visual pendiente)
-- [~] AC4 Ctrl/Cmd+Shift+S 👁 (🧪 mapeo; verificación visual pendiente)
+- [x] AC1 Ctrl/Cmd+N 👁
+- [x] AC2 Ctrl/Cmd+O con filtro 👁
+- [x] AC3 Ctrl/Cmd+S (y Guardar como si no hay ruta) 👁
+- [x] AC4 Ctrl/Cmd+Shift+S 👁
 - [x] AC5 Guardado atómico 🧪 (INV-2) — `io::tests::atomic_failure_keeps_original`
 - [x] AC6 Preserva LF/CRLF 🧪 (INV-1) — `io::tests::roundtrip_preserves_crlf_and_bom`, `edited_crlf_file_stays_crlf`
 - [x] AC7 Error claro con no-UTF-8 🧪 — `io::tests::non_utf8_is_clear_error`

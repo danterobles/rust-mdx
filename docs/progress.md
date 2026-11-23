@@ -25,7 +25,7 @@ Decisiones:
 - Textos en `strings.rs` (NFR-8). Dependencias de sistema Linux de iced/rfd siguen por confirmar en CI.
 - Verificación 👁 AC1–AC4 confirmada manualmente por el propietario (macOS) el 2026-11-23.
 
-## US-1.1 Nuevo / Abrir / Guardar — 🟡 implementada, pendiente verificación 👁 AC1–AC4 (rama feat/us-1.1-open-save)
+## US-1.1 Nuevo / Abrir / Guardar — ✅ completa (rama feat/us-1.1-open-save)
 Plan: `mdx-core` (`error.rs`, `document.rs`, `io.rs`), `mdx-app` (`shortcuts.rs`, `app.rs` con `text_editor` mínimo, `strings.rs`).
 - AC1 👁 Ctrl/Cmd+N → documento «Sin título» (🧪 mapeo `shortcuts::tests::maps_file_shortcuts`)
 - AC2 👁 Ctrl/Cmd+O → `rfd::AsyncFileDialog` con filtros «Markdown y texto» (`md`,`markdown`,`txt`) y «Todos» (`*`)
@@ -43,3 +43,4 @@ Decisiones / limitaciones:
 - Filtro «Todos» con extensión `*`: comportamiento a confirmar por plataforma (👁).
 - Tests de `mdx-core` permiten `unwrap` vía `cfg_attr(test, ...)`; NFR-5 sigue vigente para código de producción.
 - Guardado atómico: temporal `.<nombre>.mdx-tmp-<pid>` en el mismo directorio; no preserva permisos del original (mejora futura si hace falta).
+- Verificación 👁 AC1–AC4 confirmada manualmente por el propietario el 2026-11-23.
