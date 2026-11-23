@@ -96,11 +96,11 @@
 - [x] AC4 Validación de nombres 🧪 — `fileops::tests::validates_names`, `invalid_name_leaves_disk_untouched`, `create_file_adds_md_and_never_overwrites`, `rename_moves_file_and_refuses_duplicates`, `app::tests::invalid_name_shows_inline_error_*`, `duplicate_name_error_from_disk_*`
 
 ### US-2.4 Cambios externos
-- [ ] AC1 Árbol refleja cambios 🧪
-- [ ] AC2 Recarga silenciosa sin cambios locales 🧪
-- [ ] AC3 Banner de conflicto 🧪 + 👁
-- [ ] AC4 Pestaña "(eliminado)" 🧪 + 👁
-- [ ] AC5 Guardado propio no dispara banner 🧪 (INV-3)
+- [x] AC1 Árbol refleja cambios 🧪 — `watcher::tests::*` (incl. `real_watcher_reports_creation_and_modification`), `explorer::tests::reloads_only_loaded_parent_dirs_without_duplicates`
+- [x] AC2 Recarga silenciosa sin cambios locales 🧪 — `app::tests::external_change_on_clean_document_reloads_silently`
+- [~] AC3 Banner de conflicto 🧪 + 👁 (🧪 `app::tests::external_change_on_dirty_document_shows_conflict_banner`, `conflict_reload_*`, `conflict_keep_mine_*`; 👁 pendiente)
+- [~] AC4 Pestaña "(eliminado)" 🧪 + 👁 (🧪 `app::tests::deleted_on_disk_is_marked_and_keeps_content_and_can_be_resaved`; el marcador se muestra en el título de la ventana: la barra de pestañas llega en US-3.1; 👁 pendiente)
+- [x] AC5 Guardado propio no dispara banner 🧪 (INV-3) — `app::tests::own_save_never_triggers_the_banner`
 
 - [ ] **Hito F2**: navegar y editar el repo; cambio externo manejado 👁
 

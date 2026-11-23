@@ -11,6 +11,7 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 ## [Unreleased]
 
 ### Added
+- Cambios externos: el explorador refleja altas, bajas y renombrados; el archivo abierto se recarga solo si no tiene cambios, muestra el aviso «El archivo cambió en disco» con Recargar / Conservar mío si los tiene, y se marca «(eliminado)» conservando el contenido si se borra [US-2.4]
 - Operaciones de archivo desde el explorador (clic derecho): nuevo archivo, nueva carpeta, renombrar, eliminar (a la papelera, con confirmación) y revelar en el sistema; los nombres inválidos o repetidos muestran el error en línea [US-2.3]
 - Navegación del explorador: clic abre el archivo (pestaña preview reutilizable), doble clic lo fija, flechas y Enter para moverse, expandir/colapsar y abrir, y resalte del archivo abierto [US-2.2]
 - Explorador de archivos: abrir carpeta con Ctrl/Cmd+Shift+O o `mdx <ruta>`, árbol con carga perezosa, orden carpetas primero, y filtros de archivos ocultos, `.gitignore` y solo Markdown (clic derecho en el panel) [US-2.1]
