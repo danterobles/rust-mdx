@@ -33,7 +33,9 @@ pub struct App {
     /// Instante de la última edición fusionable; `None` corta la ráfaga actual.
     last_edit_at: Option<Instant>,
     words: usize,
-    preview: markdown::Content,
+    preview: Vec<markdown::Item>,
+    /// Generación del último parseo lanzado; descarta resultados obsoletos.
+    preview_gen: u64,
     preview_visible: bool,
     /// Hay cambios sin reflejar en la vista previa (activa el temporizador de debounce).
     preview_pending: bool,
@@ -82,6 +84,7 @@ pub enum Message {
     CloseRequested,
     GuardAnswered(PendingAction, GuardChoice),
     PreviewTick(Instant),
+    PreviewParsed(u64, Vec<markdown::Item>),
     LinkClicked(String),
     LinkOpened(Result<(), String>),
 }
@@ -99,7 +102,8 @@ impl App {
                 history: History::new(),
                 last_edit_at: None,
                 words: 0,
-                preview: markdown::Content::new(),
+                preview: Vec::new(),
+                preview_gen: 0,
                 preview_visible: true,
                 preview_pending: false,
                 preview_edit_at: Instant::now(),
@@ -161,10 +165,7 @@ impl App {
                 Message::DocumentLoaded,
             ),
             Message::FilePicked(None) => Task::none(),
-            Message::DocumentLoaded(result) => {
-                self.handle_loaded(result);
-                Task::none()
-            }
+            Message::DocumentLoaded(result) => self.handle_loaded(result),
             Message::SavePicked(Some(path)) => self.save_to(path),
             Message::SavePicked(None) => {
                 self.after_save = None;
@@ -176,7 +177,13 @@ impl App {
                 if self.preview_pending
                     && now.saturating_duration_since(self.preview_edit_at) >= PREVIEW_DEBOUNCE
                 {
-                    self.refresh_preview();
+                    return self.start_preview_parse();
+                }
+                Task::none()
+            }
+            Message::PreviewParsed(generation, items) => {
+                if generation == self.preview_gen {
+                    self.preview = items;
                 }
                 Task::none()
             }
@@ -212,10 +219,7 @@ impl App {
                 self.undo_redo(false);
                 Task::none()
             }
-            ShortcutAction::TogglePreview => {
-                self.toggle_preview();
-                Task::none()
-            }
+            ShortcutAction::TogglePreview => self.toggle_preview(),
         }
     }
 
@@ -243,9 +247,9 @@ impl App {
             PendingAction::New => {
                 self.doc = Document::untitled();
                 self.content = text_editor::Content::new();
-                self.reset_editing_state();
+                let task = self.reset_editing_state();
                 self.set_status(strings::STATUS_NEW.to_owned(), false);
-                Task::none()
+                task
             }
             PendingAction::Open => Task::perform(pick_file_to_open(), Message::FilePicked),
             PendingAction::OpenPath(path) => Task::perform(
@@ -294,26 +298,44 @@ impl App {
 
     /// Sincroniza `doc.text` con el editor y recalcula dirty y palabras.
     /// Tras abrir o crear un documento: sin historial ni ráfaga activa.
-    fn reset_editing_state(&mut self) {
+    fn reset_editing_state(&mut self) -> Task<Message> {
         self.history.clear();
         self.last_edit_at = None;
         self.dirty = false;
         self.words = count_words(&self.doc.text);
-        self.refresh_preview();
-    }
-
-    fn refresh_preview(&mut self) {
-        self.preview = markdown::Content::parse(&self.doc.text);
         self.preview_pending = false;
+        if self.preview_visible {
+            self.start_preview_parse()
+        } else {
+            Task::none()
+        }
     }
 
-    fn toggle_preview(&mut self) {
+    /// Parsea el Markdown en un hilo aparte para no bloquear la UI con documentos grandes
+    /// (NFR-4). El resultado llega como `PreviewParsed` y se ignora si ya quedó obsoleto.
+    fn start_preview_parse(&mut self) -> Task<Message> {
+        self.preview_gen += 1;
+        self.preview_pending = false;
+        let generation = self.preview_gen;
+        let text = self.doc.text.clone();
+        Task::perform(
+            async move {
+                tokio::task::spawn_blocking(move || markdown::parse(&text).collect::<Vec<_>>())
+                    .await
+                    .unwrap_or_default()
+            },
+            move |items| Message::PreviewParsed(generation, items),
+        )
+    }
+
+    fn toggle_preview(&mut self) -> Task<Message> {
         self.preview_visible = !self.preview_visible;
         if self.preview_visible {
             self.panes = initial_panes();
-            self.refresh_preview();
+            self.start_preview_parse()
         } else {
             self.panes = panes_without_preview();
+            Task::none()
         }
     }
 
@@ -366,17 +388,21 @@ impl App {
         )
     }
 
-    fn handle_loaded(&mut self, result: Result<Document, CoreError>) {
+    fn handle_loaded(&mut self, result: Result<Document, CoreError>) -> Task<Message> {
         match result {
             Ok(doc) => {
                 self.content = text_editor::Content::with_text(&doc.text);
                 let name = doc.display_name(strings::UNTITLED);
                 self.doc = doc;
-                self.reset_editing_state();
+                let task = self.reset_editing_state();
                 self.set_status(format!("{}: {name}", strings::STATUS_OPENED), false);
+                task
             }
             // AC7 (US-1.1): el archivo no se abre y el documento actual queda intacto.
-            Err(err) => self.set_status(err.to_string(), true),
+            Err(err) => {
+                self.set_status(err.to_string(), true);
+                Task::none()
+            }
         }
     }
 
@@ -434,12 +460,12 @@ impl App {
                     .highlight("markdown", highlighter::Theme::InspiredGitHub)
                     .height(Length::Fill)
                     .into(),
-                PaneKind::Preview => scrollable(
-                    markdown::view(self.preview.items(), &theme).map(Message::LinkClicked),
-                )
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .into(),
+                PaneKind::Preview => {
+                    scrollable(markdown::view(&self.preview, &theme).map(Message::LinkClicked))
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .into()
+                }
             };
             pane_grid::Content::new(
                 container(body)
@@ -640,30 +666,55 @@ mod tests {
         assert_eq!((stats.line, stats.col, stats.words), (2, 2, 3));
     }
 
+    /// Simula la llegada del resultado del parseo en segundo plano.
+    fn deliver_preview(app: &mut App) {
+        let items = markdown::parse(&app.doc.text).collect();
+        let _ = app.update(Message::PreviewParsed(app.preview_gen, items));
+    }
+
     #[test]
     fn preview_updates_only_after_debounce() {
-        // AC1: el re-parseo ocurre ≥150 ms después de la última edición.
+        // AC1: el re-parseo se lanza ≥150 ms después de la última edición.
         let (mut app, _) = App::new();
         for c in "# T".chars() {
             type_char(&mut app, c);
         }
         assert!(app.preview_pending);
-        assert!(app.preview.items().is_empty());
+        let launched = app.preview_gen;
         let edited = app.preview_edit_at;
         let _ = app.update(Message::PreviewTick(edited + Duration::from_millis(100)));
         assert!(app.preview_pending, "aún dentro del debounce");
+        assert_eq!(app.preview_gen, launched);
         let _ = app.update(Message::PreviewTick(edited + Duration::from_millis(150)));
         assert!(!app.preview_pending);
-        assert!(!app.preview.items().is_empty());
+        assert_eq!(app.preview_gen, launched + 1);
+        assert!(app.preview.is_empty());
+        deliver_preview(&mut app);
+        assert!(!app.preview.is_empty());
     }
 
     #[test]
-    fn loaded_document_renders_preview_immediately() {
+    fn stale_preview_results_are_discarded() {
+        let (mut app, _) = App::new();
+        type_char(&mut app, 'a');
+        let edited = app.preview_edit_at;
+        let _ = app.update(Message::PreviewTick(edited + Duration::from_millis(150)));
+        let stale = app.preview_gen - 1;
+        let items = markdown::parse("# viejo").collect();
+        let _ = app.update(Message::PreviewParsed(stale, items));
+        assert!(app.preview.is_empty());
+    }
+
+    #[test]
+    fn loaded_document_starts_preview_parse() {
         let doc = Document::from_bytes(Path::new("a.md"), b"# Hola\n\ntexto", None).unwrap();
         let (mut app, _) = App::new();
+        let before = app.preview_gen;
         let _ = app.update(Message::DocumentLoaded(Ok(doc)));
-        assert!(!app.preview.items().is_empty());
+        assert_eq!(app.preview_gen, before + 1);
         assert!(!app.preview_pending);
+        deliver_preview(&mut app);
+        assert!(!app.preview.is_empty());
     }
 
     #[test]
@@ -686,6 +737,55 @@ mod tests {
         let _ = app.update(Message::LinkClicked("mailto:a@b.c".into()));
         assert!(app.status.as_ref().is_some_and(|s| s.is_error));
         assert_eq!(app.content.text(), "a");
+    }
+
+    /// NFR-4: coste por edición con documentos grandes (`cargo test --workspace -- --ignored`).
+    /// Ejecutar con `--release` para cifras representativas; el umbral es holgado para debug.
+    #[test]
+    #[ignore = "rendimiento: requiere fixtures/large_*.md (cargo xtask gen-fixtures)"]
+    fn perf_edit_cost_on_large_documents() {
+        const N: u128 = 20;
+        for (name, budget_ms) in [("large_1mb.md", 50u128), ("large_5mb.md", 250u128)] {
+            let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../fixtures")
+                .join(name);
+            let bytes = std::fs::read(&path).expect("ejecuta `cargo xtask gen-fixtures`");
+            let doc = Document::from_bytes(&path, &bytes, None).unwrap();
+            let (mut app, _) = App::new();
+            let t = Instant::now();
+            let _ = app.update(Message::DocumentLoaded(Ok(doc)));
+            let load_ms = t.elapsed().as_millis();
+
+            // Medir el coste de una pulsación (editar + diff + hash + palabras).
+            let mut worst = 0u128;
+            let mut total = 0u128;
+            for _ in 0..N {
+                let t = Instant::now();
+                type_char(&mut app, 'x');
+                let ms = t.elapsed().as_millis();
+                worst = worst.max(ms);
+                total += ms;
+            }
+            // Coste del parseo de la vista previa (corre fuera del hilo de UI en la app real).
+            let t = Instant::now();
+            let items: Vec<_> = markdown::parse(&app.doc.text).collect();
+            let preview_ms = t.elapsed().as_millis();
+            drop(items);
+            // Deshacer.
+            let t = Instant::now();
+            let _ = app.update(Message::Shortcut(ShortcutAction::Undo));
+            let undo_ms = t.elapsed().as_millis();
+            eprintln!(
+                "PERF {name}: carga={load_ms} ms, edición media={} ms (peor {worst} ms), \
+                 parseo preview (hilo aparte)={preview_ms} ms, deshacer={undo_ms} ms",
+                total / N
+            );
+            assert!(
+                total / N <= budget_ms,
+                "{name}: edición media {} ms > {budget_ms} ms",
+                total / N
+            );
+        }
     }
 
     #[test]

@@ -88,3 +88,20 @@ Decisiones:
 - Enlaces a `.md` relativos requieren que el documento tenga ruta; sin ruta se informa «Enlace no soportado».
 - Imágenes: fuera de esta historia (US-4.4).
 - Verificación 👁 AC1–AC4 confirmada manualmente por el propietario el 2026-11-23.
+
+## Cierre de F1 — mediciones (rama chore/cierre-f1)
+- `cargo xtask gen-fixtures` genera `fixtures/large_1mb.md` y `large_5mb.md` (ignorados por git); `cargo xtask size` verifica NFR-1.
+- Test de rendimiento `app::tests::perf_edit_cost_on_large_documents` (`#[ignore]`): `cargo test --release -p mdx-app perf_ -- --ignored --nocapture`.
+- **Hallazgo NFR-4:** el re-parseo de la vista previa en el hilo de UI costaba 258 ms (1 MB) y 3,5 s (5 MB) tras cada pausa. Se movió a `Task` + `spawn_blocking` con generación para descartar resultados viejos (`Message::PreviewParsed`); `preview` pasó de `markdown::Content` a `Vec<markdown::Item>`.
+- **Observación abierta:** abrir un archivo grande bloquea la UI mientras `text_editor::Content::with_text` lo carga (0,7 s con 1 MB; 3,4 s con 5 MB). No se puede mover a otro hilo con la API actual de iced; aceptable para «usable con 5 MB» pero a vigilar. El coste de dibujar la preview de un documento enorme (iced no virtualiza) solo se puede ver a mano.
+- **NFR-3:** la métrica fiable en macOS es el *physical footprint* (63 MB, pico 71 MB), no el RSS (102 MB). `tiny-skia` usa más memoria (RSS 153 MB) que `wgpu`.
+- **NFR-2:** sin instrumentación de «primer frame»; ≈130 ms hasta que wgpu selecciona el adaptador. Confirmación subjetiva/👁 del propietario.
+- Cobertura: `cargo-llvm-cov` 0.9.2 instalado; `mdx-core` ≈ 97 % por archivo.
+- Hito F1: se añadió `README.md` en la raíz para poder editarlo de principio a fin (👁 del propietario).
+- Mediciones hechas solo en macOS (arm64); Windows/Linux quedan para QA de F5.
+
+## Cierre de F1 → v0.2.0 (2026-11-23)
+- Decisión del propietario: ir directo a 0.2.0 sin cerrar F0 (se omite 0.1.0). F0 sigue con AC2 de US-0.1 en `[~]` (CI remoto sin verificar por falta de `push`), licencia y URL del repositorio en `TBD`.
+- Historias F1: US-1.1, US-1.2, US-1.3 y US-1.4 completas (AC verificados).
+- **Pendientes de verificación 👁 al cerrar** (no bloquean según decisión del propietario, quedan abiertos): Hito F1 (editar README sin pérdida de datos), NFR-2 (primer frame), NFR-3 con archivo de 100 KB, NFR-4 visual con `large_1mb/5mb`.
+- Tag `v0.2.0`: **no creado**; requiere autorización explícita.

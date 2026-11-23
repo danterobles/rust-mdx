@@ -32,6 +32,7 @@ components = ["rustfmt", "clippy"]
 | `open` | `5.4`| — | Abrir enlaces y "revelar en el sistema" |
 | `arboard` | `3.7`| `image-data` | Pegar imágenes del portapapeles (US-4.4) |
 | `anyhow` | `1` | — | Errores en el borde de la app |
+| `tokio` | `1` | `rt` (vía workspace) | `spawn_blocking` para parsear la vista previa fuera del hilo de UI |
 | `tracing` | `0.1` | — | Logs |
 | `tracing-subscriber` | `0.3` | `env-filter` | Salida de logs (`RUST_LOG`) |
 | `mdx-core` | path | — | Lógica |

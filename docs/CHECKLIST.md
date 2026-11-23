@@ -72,7 +72,7 @@
 - [x] AC3 Enlaces externos y relativos 👁
 - [x] AC4 Ctrl/Cmd+\ alterna preview 👁
 
-- [ ] **Hito F1**: editar el README del repo sin pérdida de datos 👁
+- [~] **Hito F1**: editar el README del repo sin pérdida de datos 👁 (README creado en el cierre; verificación manual pendiente, ver progress.md)
 
 ## Fase 2 — Explorador → v0.3.0
 
@@ -177,15 +177,15 @@
 
 | NFR | F1 | F3 | F5 | Valor medido |
 |---|---|---|---|---|
-| NFR-1 Binario < 15 MB | [ ] | [ ] | [ ] | |
-| NFR-2 Arranque < 300 ms | [ ] | [ ] | [ ] | |
-| NFR-3 RAM < 80 MB | [ ] | [ ] | [ ] | |
-| NFR-4 Archivo 1 MB fluido / 5 MB usable | [ ] | [ ] | [ ] | |
-| NFR-5 Sin unwrap en core | [ ] | [ ] | [ ] | |
-| NFR-6 Sin unsafe | [ ] | [ ] | [ ] | |
-| NFR-7 Todo por teclado | [ ] | [ ] | [ ] | |
-| NFR-8 Strings centralizados | [ ] | [ ] | [ ] | |
-| NFR-9 Cobertura core ≥ 70 % | [ ] | [ ] | [ ] | |
+| NFR-1 Binario < 15 MB | [x] | [ ] | [ ] | 11,51 MB (binario release macOS arm64, `cargo xtask size`). Instaladores: medir en F5 |
+| NFR-2 Arranque < 300 ms | [~] | [ ] | [ ] | ≈130 ms desde `main` hasta adaptador wgpu listo (log); primer frame sin instrumentar → 👁 pendiente |
+| NFR-3 RAM < 80 MB | [~] | [ ] | [ ] | Footprint físico 63 MB (pico 71 MB) en reposo sin archivo (macOS `footprint`); RSS 102 MB incluye librerías compartidas. Con archivo de 100 KB: pendiente 👁 |
+| NFR-4 Archivo 1 MB fluido / 5 MB usable | [~] | [ ] | [ ] | Release, `cargo test --release -- --ignored`: 1 MB → edición 3 ms, deshacer 2 ms, carga 0,7 s, parseo preview 0,28 s (hilo aparte); 5 MB → edición 17 ms, deshacer 11 ms, carga 3,4 s, parseo 3,5 s. Render de preview/editor con fixtures: 👁 pendiente |
+| NFR-5 Sin unwrap en core | [x] | [ ] | [ ] | clippy `unwrap_used`/`expect_used` = deny en producción |
+| NFR-6 Sin unsafe | [x] | [ ] | [ ] | `unsafe_code = "forbid"` en el workspace |
+| NFR-7 Todo por teclado | [x] | [ ] | [ ] | F1: nuevo/abrir/guardar/deshacer/preview por atajos (el arrastre de divisores es solo ratón) |
+| NFR-8 Strings centralizados | [x] | [ ] | [ ] | Textos de UI en `strings.rs`; solo quedan separadores de formato |
+| NFR-9 Cobertura core ≥ 70 % | [x] | [ ] | [ ] | `cargo llvm-cov`: mdx-core ≈ 97 % de líneas por archivo (workspace 78 %) |
 
 ## QA manual por plataforma (antes de v1.0.0)
 
