@@ -8,6 +8,7 @@
 
 pub mod document;
 pub mod error;
+pub mod history;
 pub mod io;
 
 pub use document::{DiskState, Document, DocumentId, LineEnding};

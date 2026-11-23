@@ -57,3 +57,17 @@ Decisiones:
 - Mensaje de aviso con nombre: «{name}» se sustituye en `strings::UNSAVED_BODY`.
 - Con `exit_on_close_request(false)` el cierre lo decide la app (`iced::exit()`).
 - Verificación 👁 AC1–AC2 confirmada manualmente por el propietario el 2026-11-23.
+
+## US-1.3 Editor — 🟡 implementada, pendiente verificación 👁 AC1–AC5 (rama feat/us-1.3-editor)
+Plan: `mdx-core` (`history.rs`, `document::count_words`), `mdx-app` (`editor.rs`, `statusbar.rs`, `app.rs`, `shortcuts.rs`).
+- AC1 👁 `Font::MONOSPACE` en el `text_editor`.
+- AC2 👁 `.highlight("markdown", InspiredGitHub)` (iced_highlighter/syntect; tema claro acorde al tema fijo `Light`).
+- AC3 🧪 `history::tests::*` (round trip, ráfagas, redo descartado, multibyte, límite de memoria, texto divergente) y `app::tests::undo_and_redo_typing_burst`, `undo_restores_cursor_and_edit_after_undo_drops_redo`. Atajos: `shortcuts::tests::maps_undo_redo`.
+- AC4 🧪 `app::tests::indent_and_unindent_selection`; `key_binding` mapea Tab/Shift+Tab a `Edit::Indent/Unindent`.
+- AC5 🧪 `statusbar::tests::*` (formato, columna en caracteres), `document::tests::counts_words`, `app::tests::stats_follow_cursor_and_words`. Se muestra a la derecha de la barra de estado; los mensajes (abierto/guardado/errores) siguen a la izquierda.
+Decisiones:
+- **iced 0.14 no tiene deshacer/rehacer** en `text_editor`: se implementó `History` propio (ADR 0005), sin dependencias nuevas.
+- El parche de deshacer se aplica seleccionando el rango y pegando/borrando para no reconstruir el `Content` (conserva scroll).
+- La indentación con `Edit::Indent` usa el ancho de tabulación por defecto del motor (8 espacios, observado en test). Sin selección, inserta espacios en el cursor; con selección, indenta las líneas. No configurable en v1.
+- Palabras = secuencias separadas por espacios en blanco; se recalculan en cada edición (O(n)). **Medir en NFR-4 (1 MB)** al cierre de F1.
+- Columna mostrada en caracteres (no bytes).

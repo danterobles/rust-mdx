@@ -55,6 +55,15 @@ pub enum DiskState {
 - Al guardar: se convierte `\n` → `line_ending`, se escribe atómico, se actualiza `saved_hash` y `disk_mtime`.
 - Codificación: solo UTF-8 en v1. BOM UTF-8 se acepta y se preserva (campo `has_bom`).
 
+### 2.2.1 Historial de edición
+
+```rust
+pub type Pos = (usize, usize);   // (línea, columna en bytes), base 0
+pub struct History { /* pila de cambios por diferencias; ≤ 8 MB */ }
+pub struct Patch { pub start: usize, pub end: usize, pub replacement: String, pub cursor: Pos }
+```
+Vive por documento abierto; se vacía al abrir/crear. No se persiste.
+
 ### 2.3 Workspace y árbol de archivos
 
 ```rust

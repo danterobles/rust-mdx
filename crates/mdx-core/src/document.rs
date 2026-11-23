@@ -59,6 +59,12 @@ pub fn hash_text(text: &str) -> u64 {
     xxhash_rust::xxh3::xxh3_64(text.as_bytes())
 }
 
+/// Cuenta palabras (secuencias separadas por espacios en blanco).
+#[must_use]
+pub fn count_words(text: &str) -> usize {
+    text.split_whitespace().count()
+}
+
 /// Codifica texto normalizado (`\n`) a los bytes que se escriben en disco.
 #[must_use]
 pub fn encode_text(text: &str, line_ending: LineEnding, has_bom: bool) -> Vec<u8> {
@@ -207,6 +213,13 @@ mod tests {
         let mut u = Document::untitled();
         u.text.push('x');
         assert!(u.is_dirty());
+    }
+
+    #[test]
+    fn counts_words() {
+        assert_eq!(count_words(""), 0);
+        assert_eq!(count_words("  uno  dos\ntres\t cuatro "), 4);
+        assert_eq!(count_words("# Título con ñ"), 4);
     }
 
     #[test]

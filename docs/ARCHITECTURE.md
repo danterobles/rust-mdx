@@ -65,6 +65,7 @@ flowchart LR
 | `io` | `read_document(path)`, `write_atomic(path, bytes)`, `save_text(path, text, line_ending, has_bom) -> SavedInfo` | Async (`tokio::fs`); temp en mismo dir + `rename` + `fsync` |
 | `workspace` | `Workspace`, `FileNode`, `load_children(dir, filters)`, operaciones (crear, renombrar, papelera) | Usa `ignore::WalkBuilder` con `max_depth(1)` para carga perezosa |
 | `watcher` | `watch(root) -> impl Stream<Item = FsEvent>` | `notify-debouncer-full`, 200 ms; filtra por `TreeFilters` |
+| `history` | `History`, `Patch`, `offset_to_pos` | Deshacer/rehacer por diferencias (ADR 0005); sin dependencias de UI |
 | `outline` | `extract(text) -> Outline` | `pulldown-cmark` con `into_offset_iter` para obtener la línea |
 | `search` | `search_text(text, q)`, `search_workspace(root, q, cancel) -> Stream<SearchMatch>` | `regex`; cancelación con `CancellationToken` o `AtomicBool` |
 | `export` | `to_html(text, theme) -> String` | `comrak` con GFM; CSS embebido |
@@ -79,6 +80,8 @@ mdx-app/src/
 ├── main.rs          # init de tracing, parseo CLI, arranque iced
 ├── app.rs           # State, Message, update, view, subscription (orquestador)
 ├── layout.rs        # disposición del pane_grid (20/40/40), lógica pura
+├── editor.rs        # key_binding (Tab), aplicación de parches de historial
+├── statusbar.rs     # texto de la barra de estado (línea:col, palabras, EOL, codificación)
 ├── state/
 │   ├── tabs.rs      # lógica pura de pestañas (testeable)
 │   └── editors.rs   # HashMap<DocumentId, text_editor::Content>
@@ -206,3 +209,4 @@ Formato `docs/adr/NNNN-titulo-en-kebab.md`: **Contexto / Decisión / Alternativa
 | 0002 | Separación `mdx-core` / `mdx-app` | Aceptado |
 | 0003 | pulldown-cmark para preview, comrak para exportación | Aceptado |
 | 0004 | Persistencia en TOML sin base de datos | Aceptado |
+| 0005 | Historial de deshacer/rehacer propio | Aceptado |

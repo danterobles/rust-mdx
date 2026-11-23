@@ -10,6 +10,8 @@ pub enum ShortcutAction {
     Open,
     Save,
     SaveAs,
+    Undo,
+    Redo,
 }
 
 /// Traduce una pulsación a una acción, si corresponde.
@@ -24,6 +26,10 @@ pub fn map(key: &Key, physical: Physical, modifiers: Modifiers) -> Option<Shortc
         ('o', false) => Some(ShortcutAction::Open),
         ('s', false) => Some(ShortcutAction::Save),
         ('s', true) => Some(ShortcutAction::SaveAs),
+        ('z', false) => Some(ShortcutAction::Undo),
+        ('z', true) => Some(ShortcutAction::Redo),
+        // Ctrl+Y rehace en Windows/Linux (en macOS es Cmd+Shift+Z).
+        ('y', false) if !cfg!(target_os = "macos") => Some(ShortcutAction::Redo),
         _ => None,
     }
 }
@@ -47,6 +53,18 @@ mod tests {
             press("S", Code::KeyS, cmd | Modifiers::SHIFT),
             Some(ShortcutAction::SaveAs)
         );
+    }
+
+    #[test]
+    fn maps_undo_redo() {
+        let cmd = Modifiers::COMMAND;
+        assert_eq!(press("z", Code::KeyZ, cmd), Some(ShortcutAction::Undo));
+        assert_eq!(
+            press("Z", Code::KeyZ, cmd | Modifiers::SHIFT),
+            Some(ShortcutAction::Redo)
+        );
+        let ctrl_y = press("y", Code::KeyY, cmd);
+        assert_eq!(ctrl_y.is_some(), !cfg!(target_os = "macos"));
     }
 
     #[test]
