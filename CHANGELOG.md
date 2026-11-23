@@ -11,6 +11,7 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 ## [Unreleased]
 
 ### Added
+- Ventana principal «Mdx» con explorador, editor y vista previa (20/40/40), divisores arrastrables y barra de estado [US-0.2]
 - Especificación inicial: PRD, DATA, ARCHITECTURE, STACK, CHECKLIST y CLAUDE.md.
 
 [Unreleased]: https://github.com/OWNER/mdx/commits/main

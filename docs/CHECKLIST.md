@@ -36,10 +36,10 @@
 - [x] AC4 `cargo deny check` configurado 🧪
 
 ### US-0.2 Ventana base
-- [ ] AC1 Ventana "Mdx" abre 👁
-- [ ] AC2 Layout 3 paneles 20/40/40 👁
-- [ ] AC3 Divisores arrastrables 👁
-- [ ] AC4 Barra de estado visible 👁
+- [x] AC1 Ventana "Mdx" abre 👁
+- [x] AC2 Layout 3 paneles 20/40/40 👁
+- [x] AC3 Divisores arrastrables 👁
+- [x] AC4 Barra de estado visible 👁
 
 - [ ] **Hito F0**: CI verde en 3 SO y ventana con layout
 

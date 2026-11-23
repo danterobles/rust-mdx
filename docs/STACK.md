@@ -27,7 +27,7 @@ components = ["rustfmt", "clippy"]
 
 | Crate | Versión | Features | Para qué |
 |---|---|---|---|
-| `iced` | `0.14` | `tokio`, `highlighter`, `markdown`, `image`, `svg`, `wgpu`, `tiny-skia` (fallback) | Framework UI |
+| `iced` | `0.14` | `tokio`, `highlighter`, `markdown`, `image`, `svg`, `wgpu`, `tiny-skia` (fallback), `crisp`, `x11`, `wayland` | Framework UI |
 | `rfd` | `0.18`| `tokio` | Diálogos nativos de abrir/guardar |
 | `open` | `5.4`| — | Abrir enlaces y "revelar en el sistema" |
 | `arboard` | `3.7`| `image-data` | Pegar imágenes del portapapeles (US-4.4) |
@@ -141,7 +141,7 @@ Identificador: `mx.doitconsulting.mdx` (pendiente de confirmar, PRD §12).
 
 ## 8. Política de licencias (`deny.toml`)
 
-Permitidas: `MIT`, `Apache-2.0`, `Apache-2.0 WITH LLVM-exception`, `BSD-2-Clause`, `BSD-3-Clause`, `ISC`, `Zlib`, `Unicode-3.0`, `MPL-2.0`, `CC0-1.0`, `OFL-1.1` (fuentes).
+Permitidas: `MIT`, `Apache-2.0`, `Apache-2.0 WITH LLVM-exception`, `BSD-2-Clause`, `BSD-3-Clause`, `ISC`, `Zlib`, `Unicode-3.0`, `MPL-2.0`, `CC0-1.0`, `OFL-1.1` (fuentes), `BSL-1.0` y `NCSA` (permisivas, solo transitivas de iced; añadidas en US-0.2).
 Prohibidas: `GPL-*`, `AGPL-*`, `LGPL-*` (salvo ADR), licencias desconocidas.
 
 ## 9. Política de actualización de dependencias
