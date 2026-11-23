@@ -58,7 +58,7 @@ Decisiones:
 - Con `exit_on_close_request(false)` el cierre lo decide la app (`iced::exit()`).
 - Verificación 👁 AC1–AC2 confirmada manualmente por el propietario el 2026-11-23.
 
-## US-1.3 Editor — 🟡 implementada, pendiente verificación 👁 AC1–AC5 (rama feat/us-1.3-editor)
+## US-1.3 Editor — ✅ completa (rama feat/us-1.3-editor)
 Plan: `mdx-core` (`history.rs`, `document::count_words`), `mdx-app` (`editor.rs`, `statusbar.rs`, `app.rs`, `shortcuts.rs`).
 - AC1 👁 `Font::MONOSPACE` en el `text_editor`.
 - AC2 👁 `.highlight("markdown", InspiredGitHub)` (iced_highlighter/syntect; tema claro acorde al tema fijo `Light`).
@@ -71,3 +71,4 @@ Decisiones:
 - La indentación con `Edit::Indent` usa el ancho de tabulación por defecto del motor (8 espacios, observado en test). Sin selección, inserta espacios en el cursor; con selección, indenta las líneas. No configurable en v1.
 - Palabras = secuencias separadas por espacios en blanco; se recalculan en cada edición (O(n)). **Medir en NFR-4 (1 MB)** al cierre de F1.
 - Columna mostrada en caracteres (no bytes).
+- Verificación 👁 AC1–AC5 confirmada manualmente por el propietario el 2026-11-23.
