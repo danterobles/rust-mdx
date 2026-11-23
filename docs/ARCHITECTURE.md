@@ -66,6 +66,7 @@ flowchart LR
 | `workspace` | `Workspace`, `FileNode`, `load_children(dir, filters)`, operaciones (crear, renombrar, papelera) | Usa `ignore::WalkBuilder` con `max_depth(1)` para carga perezosa |
 | `watcher` | `watch(root) -> impl Stream<Item = FsEvent>` | `notify-debouncer-full`, 200 ms; filtra por `TreeFilters` |
 | `history` | `History`, `Patch`, `offset_to_pos` | Deshacer/rehacer por diferencias (ADR 0005); sin dependencias de UI |
+| `link` | `classify(url, base_dir) -> LinkTarget` | Enlaces de la preview: externo, Markdown local o no soportado |
 | `outline` | `extract(text) -> Outline` | `pulldown-cmark` con `into_offset_iter` para obtener la línea |
 | `search` | `search_text(text, q)`, `search_workspace(root, q, cancel) -> Stream<SearchMatch>` | `regex`; cancelación con `CancellationToken` o `AtomicBool` |
 | `export` | `to_html(text, theme) -> String` | `comrak` con GFM; CSS embebido |
@@ -147,7 +148,7 @@ sequenceDiagram
 ### 6.3 Edición y preview
 
 1. `Edit(id, action)` → `content.perform(action)`; si es edición, marcar `preview_pending = true` y guardar `last_edit = Instant::now()`.
-2. `subscription` emite `PreviewTick` cada 50 ms solo mientras `preview_pending`.
+2. `subscription` emite `PreviewTick` cada 25 ms solo mientras `preview_pending`.
 3. En `PreviewTick`, si `now - last_edit ≥ 150 ms` → re-parsear (incremental cuando sea posible) preview y outline; `preview_pending = false`.
 
 ### 6.4 Cambio externo

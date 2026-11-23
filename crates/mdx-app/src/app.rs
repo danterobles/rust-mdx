@@ -3,17 +3,19 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use iced::widget::{Column, Row, container, pane_grid, text, text_editor};
+use iced::widget::{Column, Row, container, markdown, pane_grid, scrollable, text, text_editor};
 use iced::{
-    Element, Event, Font, Length, Subscription, Task, Theme, event, highlighter, keyboard, window,
+    Element, Event, Font, Length, Subscription, Task, Theme, event, highlighter, keyboard, time,
+    window,
 };
 use mdx_core::document::count_words;
 use mdx_core::history::History;
 use mdx_core::io::SavedInfo;
+use mdx_core::link::{self, LinkTarget};
 use mdx_core::{CoreError, Document};
 
 use crate::editor;
-use crate::layout::{PaneKind, initial_panes};
+use crate::layout::{PaneKind, initial_panes, panes_without_preview};
 use crate::shortcuts::{self, ShortcutAction};
 use crate::statusbar::{Stats, display_col};
 use crate::strings;
@@ -31,17 +33,28 @@ pub struct App {
     /// Instante de la última edición fusionable; `None` corta la ráfaga actual.
     last_edit_at: Option<Instant>,
     words: usize,
+    preview: markdown::Content,
+    preview_visible: bool,
+    /// Hay cambios sin reflejar en la vista previa (activa el temporizador de debounce).
+    preview_pending: bool,
+    preview_edit_at: Instant,
 }
+
+/// Espera tras la última edición antes de re-parsear la vista previa (US-1.4 AC1).
+const PREVIEW_DEBOUNCE: Duration = Duration::from_millis(150);
+/// Frecuencia de comprobación del debounce mientras hay cambios pendientes.
+const PREVIEW_TICK: Duration = Duration::from_millis(25);
 
 /// Tiempo máximo entre pulsaciones para que cuenten como un solo paso de deshacer.
 const MERGE_WINDOW: Duration = Duration::from_millis(1000);
 
 /// Acciones que descartarían el documento actual; se protegen si hay cambios sin guardar.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PendingAction {
     Close,
     New,
     Open,
+    OpenPath(PathBuf),
 }
 
 /// Respuesta del usuario al diálogo de cambios sin guardar.
@@ -68,6 +81,9 @@ pub enum Message {
     Saved(Result<SavedInfo, CoreError>),
     CloseRequested,
     GuardAnswered(PendingAction, GuardChoice),
+    PreviewTick(Instant),
+    LinkClicked(String),
+    LinkOpened(Result<(), String>),
 }
 
 impl App {
@@ -83,6 +99,10 @@ impl App {
                 history: History::new(),
                 last_edit_at: None,
                 words: 0,
+                preview: markdown::Content::new(),
+                preview_visible: true,
+                preview_pending: false,
+                preview_edit_at: Instant::now(),
             },
             Task::none(),
         )
@@ -115,6 +135,11 @@ impl App {
                 _ => None,
             }),
             window::close_requests().map(|_| Message::CloseRequested),
+            if self.preview_pending && self.preview_visible {
+                time::every(PREVIEW_TICK).map(Message::PreviewTick)
+            } else {
+                Subscription::none()
+            },
         ])
     }
 
@@ -147,6 +172,21 @@ impl App {
             }
             Message::Saved(result) => self.handle_saved(result),
             Message::CloseRequested => self.request(PendingAction::Close),
+            Message::PreviewTick(now) => {
+                if self.preview_pending
+                    && now.saturating_duration_since(self.preview_edit_at) >= PREVIEW_DEBOUNCE
+                {
+                    self.refresh_preview();
+                }
+                Task::none()
+            }
+            Message::LinkClicked(url) => self.handle_link(&url),
+            Message::LinkOpened(result) => {
+                if let Err(err) = result {
+                    self.set_status(err, true);
+                }
+                Task::none()
+            }
             Message::GuardAnswered(action, choice) => match choice {
                 GuardChoice::Save => {
                     self.after_save = Some(action);
@@ -172,6 +212,10 @@ impl App {
                 self.undo_redo(false);
                 Task::none()
             }
+            ShortcutAction::TogglePreview => {
+                self.toggle_preview();
+                Task::none()
+            }
         }
     }
 
@@ -189,7 +233,7 @@ impl App {
         }
         let name = self.doc.display_name(strings::UNTITLED);
         Task::perform(ask_unsaved(name), move |choice| {
-            Message::GuardAnswered(action, choice)
+            Message::GuardAnswered(action.clone(), choice)
         })
     }
 
@@ -204,6 +248,10 @@ impl App {
                 Task::none()
             }
             PendingAction::Open => Task::perform(pick_file_to_open(), Message::FilePicked),
+            PendingAction::OpenPath(path) => Task::perform(
+                async move { mdx_core::io::read_document(&path).await },
+                Message::DocumentLoaded,
+            ),
         }
     }
 
@@ -251,6 +299,38 @@ impl App {
         self.last_edit_at = None;
         self.dirty = false;
         self.words = count_words(&self.doc.text);
+        self.refresh_preview();
+    }
+
+    fn refresh_preview(&mut self) {
+        self.preview = markdown::Content::parse(&self.doc.text);
+        self.preview_pending = false;
+    }
+
+    fn toggle_preview(&mut self) {
+        self.preview_visible = !self.preview_visible;
+        if self.preview_visible {
+            self.panes = initial_panes();
+            self.refresh_preview();
+        } else {
+            self.panes = panes_without_preview();
+        }
+    }
+
+    fn handle_link(&mut self, url: &str) -> Task<Message> {
+        let base = self.doc.path.as_deref().and_then(Path::parent);
+        match link::classify(url, base) {
+            LinkTarget::External(url) => {
+                Task::perform(async move { open::that_detached(url) }, |result| {
+                    Message::LinkOpened(result.map_err(|e| e.to_string()))
+                })
+            }
+            LinkTarget::Markdown(path) => self.request(PendingAction::OpenPath(path)),
+            LinkTarget::Unsupported => {
+                self.set_status(strings::STATUS_LINK_UNSUPPORTED.replace("{url}", url), true);
+                Task::none()
+            }
+        }
     }
 
     fn refresh_dirty(&mut self) {
@@ -260,6 +340,8 @@ impl App {
 
     /// Recalcula dirty y palabras a partir de `doc.text` (ya sincronizado con el editor).
     fn refresh_stats(&mut self) {
+        self.preview_pending = true;
+        self.preview_edit_at = Instant::now();
         self.dirty = self.doc.is_dirty();
         self.words = count_words(&self.doc.text);
     }
@@ -341,6 +423,7 @@ impl App {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
+        let theme = self.theme();
         let grid = pane_grid(&self.panes, |_, kind, _| {
             let body: Element<'_, Message> = match kind {
                 PaneKind::Explorer => text(strings::PANE_EXPLORER).into(),
@@ -351,7 +434,12 @@ impl App {
                     .highlight("markdown", highlighter::Theme::InspiredGitHub)
                     .height(Length::Fill)
                     .into(),
-                PaneKind::Preview => text(strings::PANE_PREVIEW).into(),
+                PaneKind::Preview => scrollable(
+                    markdown::view(self.preview.items(), &theme).map(Message::LinkClicked),
+                )
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into(),
             };
             pane_grid::Content::new(
                 container(body)
@@ -550,6 +638,54 @@ mod tests {
         type_char(&mut app, 'ñ');
         let stats = app.stats();
         assert_eq!((stats.line, stats.col, stats.words), (2, 2, 3));
+    }
+
+    #[test]
+    fn preview_updates_only_after_debounce() {
+        // AC1: el re-parseo ocurre ≥150 ms después de la última edición.
+        let (mut app, _) = App::new();
+        for c in "# T".chars() {
+            type_char(&mut app, c);
+        }
+        assert!(app.preview_pending);
+        assert!(app.preview.items().is_empty());
+        let edited = app.preview_edit_at;
+        let _ = app.update(Message::PreviewTick(edited + Duration::from_millis(100)));
+        assert!(app.preview_pending, "aún dentro del debounce");
+        let _ = app.update(Message::PreviewTick(edited + Duration::from_millis(150)));
+        assert!(!app.preview_pending);
+        assert!(!app.preview.items().is_empty());
+    }
+
+    #[test]
+    fn loaded_document_renders_preview_immediately() {
+        let doc = Document::from_bytes(Path::new("a.md"), b"# Hola\n\ntexto", None).unwrap();
+        let (mut app, _) = App::new();
+        let _ = app.update(Message::DocumentLoaded(Ok(doc)));
+        assert!(!app.preview.items().is_empty());
+        assert!(!app.preview_pending);
+    }
+
+    #[test]
+    fn toggle_preview_hides_and_restores_pane() {
+        // AC4
+        let (mut app, _) = App::new();
+        assert_eq!(app.panes.len(), 3);
+        let _ = app.update(Message::Shortcut(ShortcutAction::TogglePreview));
+        assert!(!app.preview_visible);
+        assert_eq!(app.panes.len(), 2);
+        let _ = app.update(Message::Shortcut(ShortcutAction::TogglePreview));
+        assert_eq!(app.panes.len(), 3);
+    }
+
+    #[test]
+    fn unsupported_link_reports_error_and_keeps_document() {
+        // AC3
+        let (mut app, _) = App::new();
+        type_char(&mut app, 'a');
+        let _ = app.update(Message::LinkClicked("mailto:a@b.c".into()));
+        assert!(app.status.as_ref().is_some_and(|s| s.is_error));
+        assert_eq!(app.content.text(), "a");
     }
 
     #[test]

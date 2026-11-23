@@ -12,11 +12,22 @@ pub enum ShortcutAction {
     SaveAs,
     Undo,
     Redo,
+    TogglePreview,
 }
 
 /// Traduce una pulsación a una acción, si corresponde.
 #[must_use]
 pub fn map(key: &Key, physical: Physical, modifiers: Modifiers) -> Option<ShortcutAction> {
+    // Ctrl/Cmd+\ se detecta por tecla física: en muchos teclados la barra invertida requiere Alt.
+    if modifiers.command()
+        && !modifiers.shift()
+        && matches!(
+            physical,
+            Physical::Code(iced::keyboard::key::Code::Backslash)
+        )
+    {
+        return Some(ShortcutAction::TogglePreview);
+    }
     if !modifiers.command() || modifiers.alt() {
         return None;
     }
@@ -65,6 +76,21 @@ mod tests {
         );
         let ctrl_y = press("y", Code::KeyY, cmd);
         assert_eq!(ctrl_y.is_some(), !cfg!(target_os = "macos"));
+    }
+
+    #[test]
+    fn maps_toggle_preview_by_physical_key() {
+        let cmd = Modifiers::COMMAND;
+        assert_eq!(
+            press("\\", Code::Backslash, cmd),
+            Some(ShortcutAction::TogglePreview)
+        );
+        // En teclados donde `\` exige Alt, la tecla física sigue funcionando.
+        assert_eq!(
+            press("º", Code::Backslash, cmd | Modifiers::ALT),
+            Some(ShortcutAction::TogglePreview)
+        );
+        assert_eq!(press("\\", Code::Backslash, Modifiers::empty()), None);
     }
 
     #[test]

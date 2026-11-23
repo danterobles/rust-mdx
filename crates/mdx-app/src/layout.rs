@@ -31,6 +31,17 @@ pub fn initial_panes() -> pane_grid::State<PaneKind> {
     })
 }
 
+/// Disposición con la vista previa oculta: Explorador 20 % · Editor 80 %.
+#[must_use]
+pub fn panes_without_preview() -> pane_grid::State<PaneKind> {
+    pane_grid::State::with_configuration(Configuration::Split {
+        axis: Axis::Vertical,
+        ratio: EXPLORER_RATIO,
+        a: Box::new(Configuration::Pane(PaneKind::Explorer)),
+        b: Box::new(Configuration::Pane(PaneKind::Editor)),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -81,5 +92,12 @@ mod tests {
             panic!("split esperado")
         };
         assert!((ratio - 0.3).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn layout_without_preview_has_two_panes() {
+        let state = panes_without_preview();
+        assert_eq!(state.len(), 2);
+        assert!(state.iter().all(|(_, k)| *k != PaneKind::Preview));
     }
 }

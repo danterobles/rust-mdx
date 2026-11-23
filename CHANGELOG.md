@@ -11,6 +11,9 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 ## [Unreleased]
 
 ### Added
+- Vista previa en vivo con CommonMark y GFM (encabezados, listas, tareas, tablas, código resaltado), actualizada tras 150 ms sin escribir [US-1.4]
+- Enlaces de la vista previa: `http(s)` se abren en el navegador y los `.md` relativos se abren en el editor [US-1.4]
+- Ctrl/Cmd+\ muestra u oculta la vista previa [US-1.4]
 - Editor con fuente monoespaciada y resaltado de sintaxis Markdown [US-1.3]
 - Deshacer y rehacer (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl+Y en Windows/Linux) [US-1.3]
 - Tab y Shift+Tab para indentar y desindentar [US-1.3]

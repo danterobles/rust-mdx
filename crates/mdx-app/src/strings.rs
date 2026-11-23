@@ -3,7 +3,6 @@
 pub const APP_TITLE: &str = "Mdx";
 pub const UNTITLED: &str = "Sin título";
 pub const PANE_EXPLORER: &str = "Explorador";
-pub const PANE_PREVIEW: &str = "Vista previa";
 
 pub const FILTER_MARKDOWN: &str = "Markdown y texto";
 pub const FILTER_ALL: &str = "Todos los archivos";
@@ -28,3 +27,5 @@ pub const EOL_LF: &str = "LF";
 pub const EOL_CRLF: &str = "CRLF";
 pub const ENCODING_UTF8: &str = "UTF-8";
 pub const ENCODING_UTF8_BOM: &str = "UTF-8 con BOM";
+
+pub const STATUS_LINK_UNSUPPORTED: &str = "Enlace no soportado: {url}";
