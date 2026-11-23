@@ -45,7 +45,7 @@ Decisiones / limitaciones:
 - Guardado atómico: temporal `.<nombre>.mdx-tmp-<pid>` en el mismo directorio; no preserva permisos del original (mejora futura si hace falta).
 - Verificación 👁 AC1–AC4 confirmada manualmente por el propietario el 2026-11-23.
 
-## US-1.2 Estado "sin guardar" — 🟡 implementada, pendiente verificación 👁 AC1–AC2 (rama feat/us-1.2-sin-guardar)
+## US-1.2 Estado "sin guardar" — ✅ completa (rama feat/us-1.2-sin-guardar)
 Plan: `app.rs` (`dirty`, `PendingAction`, `GuardChoice`, `after_save`), `strings.rs`, `main.rs` (`exit_on_close_request(false)`).
 - AC1 🧪 `app::tests::editing_marks_dirty_in_title` + 👁 título `● nombre — Mdx`
 - AC2 👁 al cerrar con cambios aparece el diálogo Guardar / Descartar / Cancelar (`rfd::AsyncMessageDialog`, botones personalizados). Guardar → guarda y luego cierra (si el guardado falla o se cancela «Guardar como», no cierra). Descartar → cierra. Cancelar → sigue abierto.
@@ -56,3 +56,4 @@ Decisiones:
 - Si el usuario edita mientras se guarda, el documento queda sucio (se compara contra el contenido actual).
 - Mensaje de aviso con nombre: «{name}» se sustituye en `strings::UNSAVED_BODY`.
 - Con `exit_on_close_request(false)` el cierre lo decide la app (`iced::exit()`).
+- Verificación 👁 AC1–AC2 confirmada manualmente por el propietario el 2026-11-23.
