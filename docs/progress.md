@@ -137,7 +137,7 @@ Decisiones:
 - `Tabs::{tabs, active, is_pinned}` llevan `#[allow(dead_code)]` hasta que la use US-3.1.
 - Verificación 👁 AC1–AC3 confirmada manualmente por el propietario el 2026-11-23.
 
-## US-2.3 Operaciones de archivo — 🟡 implementada, pendiente verificación 👁 AC1 y AC2 (rama feat/us-2.3-operaciones)
+## US-2.3 Operaciones de archivo — ✅ completa (rama feat/us-2.3-operaciones)
 Plan: `mdx-core::fileops` (validación, crear, renombrar, papelera, revelar, `rebase_path`), `mdx-app` (`explorer.rs` menú contextual y entrada de nombre en línea; `app.rs` `update_explorer`, `OpOutcome`).
 - AC1 👁 clic derecho en una fila (archivo, carpeta) o en el nombre de la carpeta raíz abre el menú: Nuevo archivo, Nueva carpeta, Renombrar, Eliminar, Revelar en el sistema (la raíz no ofrece renombrar/eliminar). Clic derecho en espacio vacío abre el menú de filtros de US-2.1.
 - AC2 🧪/👁 `fileops::move_to_trash` delega en `trash::delete`; no hay `remove_file`/`remove_dir*` sobre archivos del usuario (grep limpio salvo el temporal propio del guardado atómico). La prueba unitaria usa un «trasher» inyectado para no ensuciar la papelera real del desarrollador; el envío real a la papelera se verifica a mano. Confirmación con diálogo nativo «Mover a la papelera / Cancelar».
@@ -151,3 +151,4 @@ Decisiones:
 - Renombrar solo mayúsculas/minúsculas se permite incluso en sistemas de archivos que no las distinguen.
 - «Revelar»: `open -R` (macOS), `explorer /select,` (Windows), `xdg-open <carpeta>` (Linux).
 - `update` se dividió: `update_explorer` agrupa los mensajes del explorador (límite de líneas de clippy).
+- Verificación 👁 AC1 y AC2 confirmada manualmente por el propietario el 2026-11-23.
