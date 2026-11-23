@@ -130,10 +130,11 @@ impl History {
         }
         self.bytes += entry.size();
         self.undo.push_back(entry);
-        while self.bytes > MAX_BYTES {
-            match self.undo.pop_front() {
-                Some(old) => self.bytes -= old.size(),
-                None => break,
+        // Se descarta lo más antiguo, pero nunca la última edición: un «reemplazar todo» en un
+        // documento grande puede superar por sí solo el presupuesto y debe poder deshacerse.
+        while self.bytes > MAX_BYTES && self.undo.len() > 1 {
+            if let Some(old) = self.undo.pop_front() {
+                self.bytes -= old.size();
             }
         }
     }
@@ -320,6 +321,22 @@ mod tests {
             2,
             "la columna se acota a la línea"
         );
+    }
+
+    #[test]
+    fn a_single_edit_larger_than_the_budget_is_still_undoable() {
+        let mut h = History::new();
+        let old = "a".repeat(MAX_BYTES);
+        let new = "b".repeat(MAX_BYTES);
+        h.record(&old, &new, (0, 0), (0, 0), false);
+        let patch = h.undo(&new).expect("la última edición se conserva");
+        assert_eq!(patch.replacement.len(), MAX_BYTES);
+        // Una edición posterior sí desaloja a la anterior si se pasa del presupuesto.
+        let mut h = History::new();
+        h.record(&old, &new, (0, 0), (0, 0), false);
+        h.record(&new, "c", (0, 0), (0, 0), false);
+        assert!(h.can_undo());
+        assert!(h.bytes <= MAX_BYTES + 1);
     }
 
     #[test]

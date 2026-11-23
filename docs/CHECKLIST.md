@@ -177,15 +177,15 @@
 
 | NFR | F1 | F3 | F5 | Valor medido |
 |---|---|---|---|---|
-| NFR-1 Binario < 15 MB | [x] | [ ] | [ ] | 11,51 MB (binario release macOS arm64, `cargo xtask size`). Instaladores: medir en F5 |
-| NFR-2 Arranque < 300 ms | [~] | [ ] | [ ] | ≈130 ms desde `main` hasta adaptador wgpu listo (log); primer frame sin instrumentar → 👁 pendiente |
-| NFR-3 RAM < 80 MB | [~] | [ ] | [ ] | Footprint físico 63 MB (pico 71 MB) en reposo sin archivo (macOS `footprint`); RSS 102 MB incluye librerías compartidas. Con archivo de 100 KB: pendiente 👁 |
-| NFR-4 Archivo 1 MB fluido / 5 MB usable | [~] | [ ] | [ ] | Release, `cargo test --release -- --ignored`: 1 MB → edición 3 ms, deshacer 2 ms, carga 0,7 s, parseo preview 0,28 s (hilo aparte); 5 MB → edición 17 ms, deshacer 11 ms, carga 3,4 s, parseo 3,5 s. Render de preview/editor con fixtures: 👁 pendiente |
-| NFR-5 Sin unwrap en core | [x] | [ ] | [ ] | clippy `unwrap_used`/`expect_used` = deny en producción |
-| NFR-6 Sin unsafe | [x] | [ ] | [ ] | `unsafe_code = "forbid"` en el workspace |
-| NFR-7 Todo por teclado | [x] | [ ] | [ ] | F1: nuevo/abrir/guardar/deshacer/preview por atajos (el arrastre de divisores es solo ratón) |
-| NFR-8 Strings centralizados | [x] | [ ] | [ ] | Textos de UI en `strings.rs`; solo quedan separadores de formato |
-| NFR-9 Cobertura core ≥ 70 % | [x] | [ ] | [ ] | `cargo llvm-cov`: mdx-core ≈ 97 % de líneas por archivo (workspace 78 %) |
+| NFR-1 Binario < 15 MB | [x] | [x] | [ ] | 11,51 MB (binario release macOS arm64, `cargo xtask size`). Instaladores: medir en F5 · **F3:** 12,39 MB (binario release macOS arm64, `cargo xtask size`) |
+| NFR-2 Arranque < 300 ms | [~] | [~] | [ ] | ≈130 ms desde `main` hasta adaptador wgpu listo (log); primer frame sin instrumentar → 👁 pendiente · **F3:** ≈145–180 ms desde `main` hasta adaptador wgpu listo (con sesión restaurada); primer frame sin instrumentar → 👁 |
+| NFR-3 RAM < 80 MB | [~] | [ ] | [ ] | Footprint físico 63 MB (pico 71 MB) en reposo sin archivo (macOS `footprint`); RSS 102 MB incluye librerías compartidas. Con archivo de 100 KB: pendiente 👁 · **F3 ✗ NO CUMPLIDO:** footprint físico (macOS `footprint`) 82 MB con un archivo de unas líneas y **176 MB con un archivo de 100 KB** (143 MB con la vista previa oculta; ≈19 MB menos sin resaltado). Reposo sin archivo: 63 MB. Causa: `cosmic-text` guarda glifos de todo el texto en el editor y en la vista previa. Ver progress.md |
+| NFR-4 Archivo 1 MB fluido / 5 MB usable | [~] | [~] | [ ] | Release, `cargo test --release -- --ignored`: 1 MB → edición 3 ms, deshacer 2 ms, carga 0,7 s, parseo preview 0,28 s (hilo aparte); 5 MB → edición 17 ms, deshacer 11 ms, carga 3,4 s, parseo 3,5 s. Render de preview/editor con fixtures: 👁 pendiente · **F3** (release): 1 MB → pulsación 3–4 ms (4 ms con la barra de búsqueda abierta), buscar 4 348 coincidencias 1 ms, sondeo de scroll < 1 ms, reemplazar todo 0,76 s y deshacerlo 0,72 s, esquema/bloques 5 ms (en hilo aparte); 5 MB → pulsación 17–21 ms, buscar 21 534 coincidencias 2 ms, reemplazar todo 3,5 s y deshacer 3,5 s. Abrir bloquea la UI 0,7 s (1 MB) / 3,4 s (5 MB). 👁 pendiente |
+| NFR-5 Sin unwrap en core | [x] | [x] | [ ] | clippy `unwrap_used`/`expect_used` = deny en producción · **F3:** clippy `unwrap_used`/`expect_used` = deny en producción |
+| NFR-6 Sin unsafe | [x] | [x] | [ ] | `unsafe_code = "forbid"` en el workspace · **F3:** `unsafe_code = "forbid"` en el workspace |
+| NFR-7 Todo por teclado | [x] | [~] | [ ] | F1: nuevo/abrir/guardar/deshacer/preview por atajos (el arrastre de divisores es solo ratón) · **F3:** atajos para abrir/guardar/pestañas/buscar/deshacer/preview; solo con ratón: cambio de panel lateral (Archivos/Esquema), esquema, casilla de scroll sincronizado, menús contextuales y botones de la barra de búsqueda |
+| NFR-8 Strings centralizados | [x] | [x] | [ ] | Textos de UI en `strings.rs`; solo quedan separadores de formato · **F3:** textos de UI en `strings.rs` |
+| NFR-9 Cobertura core ≥ 70 % | [x] | [x] | [ ] | `cargo llvm-cov`: mdx-core ≈ 97 % de líneas por archivo (workspace 78 %) · **F3:** `cargo llvm-cov`: todos los archivos de mdx-core ≥ 79 % de líneas (workspace 78 %) |
 
 ## QA manual por plataforma (antes de v1.0.0)
 
