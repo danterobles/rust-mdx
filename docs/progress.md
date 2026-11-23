@@ -294,7 +294,7 @@ Decisiones:
 - Mdx nunca escribe `appearance.zoom` en `config.toml` (INV-6).
 - Verificación 👁 AC1 confirmada manualmente por el propietario el 2026-11-23.
 
-## US-4.3 Exportar HTML — 🟡 implementada, pendiente verificación 👁 AC1 (rama feat/us-4.3-exportar-html)
+## US-4.3 Exportar HTML — ✅ completa (rama feat/us-4.3-exportar-html)
 Plan: `mdx-core::export` (`comrak` con GFM, CSS embebido), botón y atajo en la app, guardado atómico en un `Task`.
 - AC1 👁 «Exportar HTML» en la cabecera de la vista previa o `Ctrl/Cmd+Shift+E`: diálogo «Guardar como» (sugiere `<nombre>.html` junto al documento) y exporta el **texto actual** (incluidos los cambios sin guardar). El HTML es autocontenido: un solo archivo con `<style>` embebido (GitHub-like, claro/oscuro según `prefers-color-scheme`), sin `<link>`, scripts ni fuentes externas. Soporta tablas, tachado, listas de tareas, autoenlaces, notas al pie, bloques de código con `class="language-…"` y ids de encabezado. El bloque YAML inicial (`---`) no se emite.
 - AC2 🧪 dos snapshots `insta` (cuerpo y documento completo) + pruebas de seguridad (el `<script>` y los enlaces `javascript:` no salen: modo seguro de comrak, `render.unsafe = false`).
@@ -304,3 +304,4 @@ Decisiones y límites:
 - Las **imágenes** con ruta relativa se exportan como enlaces (no se incrustan); incrustarlas sería una mejora posterior. `aria-label` de los anclajes de encabezado sale en inglés (texto fijo de comrak).
 - Nueva dependencia `comrak 1.2` (ya prevista en STACK, `default-features = false`) → licencia transitiva `Unicode-DFS-2016` (de `finl_unicode`) añadida a `deny.toml` y STACK §8, equivalente a `Unicode-3.0`.
 - `app/mod.rs`: `view` se dividió en `editor_pane`/`preview_pane` por límite de líneas de clippy.
+- Verificación 👁 AC1 confirmada manualmente por el propietario el 2026-11-23.
