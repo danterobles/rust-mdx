@@ -12,6 +12,7 @@ description = "Lógica pura de Mdx (sin UI)"
 comrak.workspace = true
 directories.workspace = true
 futures.workspace = true
+image.workspace = true
 ignore.workspace = true
 notify.workspace = true
 notify-debouncer-full.workspace = true

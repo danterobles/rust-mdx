@@ -118,3 +118,8 @@ pub const EXPORT_HTML: &str = "Exportar HTML";
 pub const DIALOG_EXPORT_TITLE: &str = "Exportar a HTML";
 pub const FILTER_HTML: &str = "Documento HTML";
 pub const STATUS_EXPORTED: &str = "Exportado";
+
+pub const STATUS_IMAGE_SAVED: &str = "Imagen guardada";
+pub const STATUS_PASTE_NEEDS_SAVE: &str =
+    "Guarde el documento antes de pegar una imagen (se guarda junto a él, en assets/).";
+pub const IMAGE_UNAVAILABLE: &str = "Imagen no disponible: {url}";

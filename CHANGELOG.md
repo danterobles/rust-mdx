@@ -11,6 +11,8 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 ## [Unreleased]
 
 ### Added
+- Imágenes en la vista previa (rutas relativas al documento; `png`, `jpg`, `gif`, `webp`, `bmp` y `svg`). Las remotas o inexistentes muestran un aviso en su lugar [US-4.4]
+- Pegar una imagen del portapapeles con `Ctrl/Cmd+V` en el editor: se guarda en `assets/AAAAMMDD-N.png` junto al documento y se inserta `![](assets/…)` [US-4.4]
 - Exportar a HTML autocontenido (botón «Exportar HTML» en la vista previa o `Ctrl/Cmd+Shift+E`): CommonMark + GFM (tablas, tareas, tachado, notas al pie), CSS embebido que se adapta al modo claro/oscuro, sin ejecutar el HTML crudo del documento [US-4.3]
 - Zoom del editor y de la vista previa con `Ctrl/Cmd +`, `Ctrl/Cmd -` (pasos del 10 %, de 50 % a 300 %) y `Ctrl/Cmd 0` (vuelve al valor de `appearance.zoom`). El último zoom se recuerda entre sesiones [US-4.5]
 - Temas claro y oscuro; por defecto la interfaz sigue al modo claro/oscuro del sistema y cambia al instante cuando este cambia. Se fija con `[appearance] theme = "light" | "dark" | "system"`. La vista previa, el esquema, el explorador y el resaltado del editor usan la paleta del tema activo [US-4.1]

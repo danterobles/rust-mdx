@@ -29,6 +29,7 @@ pub(super) struct OpenDoc {
     pub(super) external: Option<Document>,
     pub(super) outline: Outline,
     pub(super) blocks: Vec<Block>,
+    pub(super) unavailable_images: std::collections::HashSet<String>,
     pub(super) view_top: (usize, f32),
     pub(super) last_change: Instant,
 }
@@ -52,6 +53,7 @@ impl App {
             external: self.external.take(),
             outline: mem::take(&mut self.outline),
             blocks: mem::take(&mut self.blocks),
+            unavailable_images: mem::take(&mut self.unavailable_images),
             view_top: mem::take(&mut self.view_top),
             last_change: self.last_change,
         }
@@ -71,6 +73,7 @@ impl App {
         self.external = d.external;
         self.outline = d.outline;
         self.blocks = d.blocks;
+        self.unavailable_images = d.unavailable_images;
         self.view_top = d.view_top;
         self.last_change = d.last_change;
     }

@@ -4,6 +4,7 @@
 #![cfg_attr(test, allow(clippy::assert_is_empty))]
 
 mod app;
+mod clipboard;
 mod editor;
 mod explorer;
 mod layout;

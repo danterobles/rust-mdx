@@ -129,6 +129,7 @@ fn parsed_of(text: &str) -> Parsed {
         items: markdown::parse(text).collect(),
         outline: mdx_core::outline::extract(text),
         blocks: mdx_core::outline::top_level_blocks(text),
+        unavailable_images: std::collections::HashSet::new(),
     }
 }
 
@@ -2316,4 +2317,96 @@ fn cancelling_the_export_dialog_does_nothing_and_exporting_never_touches_the_doc
         "el documento sigue sin guardar y sin cambios"
     );
     assert!(app.status.as_ref().is_none_or(|s| !s.is_error));
+}
+
+// ----------------------------------------------------------- US-4.4: imágenes
+
+#[test]
+fn pasting_an_image_into_an_unsaved_document_asks_to_save_first() {
+    // AC2: sin ruta no hay carpeta «junto al documento» donde guardar `assets/`.
+    let (mut app, _) = App::new(None);
+    let image = crate::clipboard::ClipboardImage {
+        width: 1,
+        height: 1,
+        rgba: vec![0, 0, 0, 255],
+    };
+    let _ = app.update(Message::ClipboardImage(Some(image)));
+    assert!(
+        app.status
+            .as_ref()
+            .is_some_and(|s| s.is_error && s.text.contains("Guarde"))
+    );
+    assert_eq!(app.content.text(), "");
+}
+
+#[test]
+fn a_saved_image_is_inserted_as_a_markdown_link_at_the_cursor() {
+    // AC2
+    let (mut app, _) = App::new(None);
+    let _ = open_with(&mut app, "antes  después");
+    app.content.move_to(text_editor::Cursor {
+        position: text_editor::Position { line: 0, column: 6 },
+        selection: None,
+    });
+    let saved = mdx_core::assets::SavedImage {
+        path: PathBuf::from("/proyecto/assets/20261123-1.png"),
+        relative: "assets/20261123-1.png".to_owned(),
+    };
+    let id = app.doc.id;
+    let _ = app.update(Message::ImageSaved(id, Ok(saved)));
+    assert_eq!(
+        app.content.text(),
+        "antes ![](assets/20261123-1.png) después"
+    );
+    assert_eq!(app.title(), "● a.md — Mdx");
+    assert!(
+        app.status
+            .as_ref()
+            .is_some_and(|s| s.text.contains("assets/20261123-1.png"))
+    );
+    // Y se deshace de un paso.
+    let _ = app.update(Message::Shortcut(ShortcutAction::Undo));
+    assert_eq!(app.content.text(), "antes  después");
+}
+
+#[test]
+fn an_image_saved_for_a_background_tab_goes_into_that_tab() {
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "uno");
+    let b = open_pinned_doc(&mut app, "b.md", "dos");
+    let saved = mdx_core::assets::SavedImage {
+        path: PathBuf::from("/proyecto/assets/x.png"),
+        relative: "assets/x.png".to_owned(),
+    };
+    let _ = app.update(Message::ImageSaved(a, Ok(saved)));
+    assert_eq!(app.doc.id, b, "no cambia de pestaña");
+    assert_eq!(app.content.text(), "dos");
+    let _ = app.update(Message::SelectTab(a));
+    assert!(app.content.text().contains("![](assets/x.png)"));
+}
+
+#[test]
+fn a_failed_image_save_reports_the_error_and_leaves_the_text_alone() {
+    let (mut app, _) = App::new(None);
+    let _ = open_with(&mut app, "texto");
+    let id = app.doc.id;
+    let _ = app.update(Message::ImageSaved(
+        id,
+        Err(CoreError::PermissionDenied(PathBuf::from(
+            "/proyecto/assets",
+        ))),
+    ));
+    assert_eq!(app.content.text(), "texto");
+    assert!(app.status.as_ref().is_some_and(|s| s.is_error));
+}
+
+#[test]
+fn text_paste_normalises_line_endings_and_ignores_an_empty_clipboard() {
+    let (mut app, _) = App::new(None);
+    let _ = app.update(Message::PasteText(Some("uno\r\ndos\rtres".to_owned())));
+    assert_eq!(app.content.text(), "uno\ndos\ntres");
+    let before = app.content.text();
+    let _ = app.update(Message::PasteText(None));
+    let _ = app.update(Message::PasteText(Some(String::new())));
+    assert_eq!(app.content.text(), before);
 }

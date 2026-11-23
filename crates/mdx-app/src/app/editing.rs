@@ -234,6 +234,13 @@ impl App {
     fn apply_saved(&mut self, result: Result<SavedInfo, CoreError>) -> bool {
         match result {
             Ok(info) => {
+                // Si el documento cambió de carpeta («Guardar como»), las rutas relativas de sus
+                // imágenes se resuelven distinto: se vuelve a parsear la vista previa.
+                if self.doc.path.as_deref().map(std::path::Path::parent) != Some(info.path.parent())
+                {
+                    self.preview_pending = true;
+                    self.preview_edit_at = Instant::now();
+                }
                 self.doc.path = Some(info.path);
                 self.doc.saved_hash = Some(info.saved_hash);
                 self.doc.disk_mtime = info.mtime;

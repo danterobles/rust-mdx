@@ -4,6 +4,7 @@ mod disk;
 mod documents;
 mod editing;
 mod explorer_ops;
+mod paste;
 mod preview;
 mod search_ops;
 mod session_ops;
@@ -27,6 +28,7 @@ use iced::widget::{
 use iced::{
     Element, Event, Font, Length, Subscription, Task, Theme, event, keyboard, time, window,
 };
+use mdx_core::assets::{self, SavedImage};
 use mdx_core::config::{Config, LoadedConfig};
 use mdx_core::document::count_words;
 use mdx_core::fileops;
@@ -41,6 +43,7 @@ use mdx_core::watcher::{self, FsEvent};
 use mdx_core::workspace::{self, FileNode, TreeFilters, Workspace};
 use mdx_core::{CoreError, DiskState, Document, DocumentId};
 
+use crate::clipboard::ClipboardImage;
 use crate::editor;
 use crate::explorer::{
     self, ContextAction, ContextTarget, ExplorerKey, ExplorerState, Nav, PROMPT_ID, Prompt,
@@ -57,12 +60,46 @@ use crate::strings;
 use crate::theme;
 use zoom::ZoomChange;
 
-/// Visor de Markdown por defecto; solo define cómo se convierte un enlace en mensaje.
-struct PreviewViewer;
+/// Visor de Markdown de la vista previa: convierte los enlaces en mensajes y dibuja las
+/// imágenes locales (ruta relativa al documento).
+struct PreviewViewer {
+    /// Directorio del documento, para resolver rutas relativas.
+    base: Option<PathBuf>,
+    /// Imágenes que no se pudieron resolver o no existen (se calcula al parsear).
+    unavailable: std::collections::HashSet<String>,
+}
 
 impl markdown::Viewer<'_, String> for PreviewViewer {
     fn on_link_click(url: markdown::Uri) -> String {
         url
+    }
+
+    fn image(
+        &self,
+        settings: markdown::Settings,
+        url: &markdown::Uri,
+        _title: &str,
+        _alt: &markdown::Text,
+    ) -> Element<'static, String> {
+        let local = if self.unavailable.contains(url) {
+            None
+        } else {
+            assets::resolve_image(url, self.base.as_deref())
+        };
+        let Some(path) = local else {
+            return container(text(strings::IMAGE_UNAVAILABLE.replace("{url}", url)))
+                .padding(settings.spacing.0)
+                .style(container::bordered_box)
+                .into();
+        };
+        if assets::is_svg(&path) {
+            iced::widget::svg(path).width(Length::Fill).into()
+        } else {
+            iced::widget::image(path)
+                .width(Length::Fill)
+                .content_fit(iced::ContentFit::ScaleDown)
+                .into()
+        }
     }
 }
 
@@ -91,6 +128,8 @@ pub struct App {
     explorer: ExplorerState,
     sidebar: Sidebar,
     outline: Outline,
+    /// Imágenes de la vista previa que no se pueden mostrar.
+    unavailable_images: std::collections::HashSet<String>,
     /// Bloques de nivel superior del documento (líneas de origen), para el scroll sincronizado.
     blocks: Vec<Block>,
     /// Primera fila visible del editor: (línea, fracción de esa línea).
@@ -209,6 +248,8 @@ pub struct Parsed {
     pub items: Vec<markdown::Item>,
     pub outline: Outline,
     pub blocks: Vec<Block>,
+    /// Imágenes del documento que no se pueden mostrar (remotas o inexistentes).
+    pub unavailable_images: std::collections::HashSet<String>,
 }
 
 /// Respuesta del usuario al diálogo de cambios sin guardar.
@@ -263,6 +304,10 @@ pub enum Message {
     PreviewMeasured(DocumentId, Layout),
     SetSyncScroll(bool),
     ExportHtml,
+    PasteRequested,
+    ClipboardImage(Option<ClipboardImage>),
+    PasteText(Option<String>),
+    ImageSaved(DocumentId, Result<SavedImage, CoreError>),
     HtmlExportPicked(Option<(PathBuf, String, String)>),
     HtmlExported(Result<PathBuf, CoreError>),
     LayoutChanged,
@@ -352,6 +397,7 @@ impl App {
                 },
                 sidebar: Sidebar::Files,
                 outline: Vec::new(),
+                unavailable_images: std::collections::HashSet::new(),
                 blocks: Vec::new(),
                 view_top: (0, 0.0),
                 preview_layout: Layout::default(),
@@ -475,12 +521,6 @@ impl App {
     #[allow(clippy::needless_pass_by_value)]
     fn update_inner(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::PaneResized(event) => {
-                self.panes.resize(event.split, event.ratio);
-                // El ancho de la vista previa cambió: los bloques miden otra altura.
-                self.measure_preview()
-            }
-            Message::LayoutChanged => self.measure_preview(),
             Message::Edit(action) => self.handle_edit(action),
             Message::Shortcut(action) => self.handle_shortcut(action),
             Message::FilePicked(Some(path)) | Message::OpenRecentFile(path) => {
@@ -506,11 +546,11 @@ impl App {
                 .with_doc(id, |app| app.handle_disk_inspected(id, &path, result))
                 .unwrap_or_else(Task::none),
             Message::ResolveConflict(choice) => self.resolve_conflict(choice),
-            Message::SetSidebar(sidebar) => {
-                self.sidebar = sidebar;
-                Task::none()
-            }
-            Message::GoToLine(line) => self.go_to_line(line),
+            m @ (Message::PaneResized(_)
+            | Message::LayoutChanged
+            | Message::SetSidebar(_)
+            | Message::GoToLine(_)
+            | Message::EscapePressed) => self.update_ui(m),
             m @ (Message::SystemTheme(_)
             | Message::ConfigLoaded(_)
             | Message::ConfigReloaded(_)
@@ -524,14 +564,12 @@ impl App {
             | Message::PreviewMeasured(..)
             | Message::SetSyncScroll(_)
             | Message::ExportHtml
+            | Message::PasteRequested
+            | Message::ClipboardImage(_)
+            | Message::PasteText(_)
+            | Message::ImageSaved(..)
             | Message::HtmlExportPicked(_)
             | Message::HtmlExported(_)) => self.update_preview(m),
-            Message::EscapePressed => {
-                if self.find.open {
-                    self.close_find();
-                }
-                Task::none()
-            }
             m @ (Message::FindQueryChanged(_)
             | Message::ReplaceChanged(_)
             | Message::FindOptionToggled(_)
@@ -571,6 +609,31 @@ impl App {
                 Task::none()
             }
             Message::GuardAnswered(action, choice) => self.guard_answered(action, choice),
+        }
+    }
+
+    /// Mensajes de la disposición de la interfaz: paneles, panel lateral, ir a una línea y Esc.
+    #[allow(clippy::needless_pass_by_value)]
+    fn update_ui(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::PaneResized(event) => {
+                self.panes.resize(event.split, event.ratio);
+                // El ancho de la vista previa cambió: los bloques miden otra altura.
+                self.measure_preview()
+            }
+            Message::LayoutChanged => self.measure_preview(),
+            Message::SetSidebar(sidebar) => {
+                self.sidebar = sidebar;
+                Task::none()
+            }
+            Message::GoToLine(line) => self.go_to_line(line),
+            Message::EscapePressed => {
+                if self.find.open {
+                    self.close_find();
+                }
+                Task::none()
+            }
+            _ => Task::none(),
         }
     }
 
@@ -794,8 +857,17 @@ impl App {
             PREVIEW_BASE_TEXT_PX * self.zoom,
             markdown::Style::from(theme),
         );
+        let viewer = PreviewViewer {
+            base: self
+                .doc
+                .path
+                .as_deref()
+                .and_then(Path::parent)
+                .map(Path::to_path_buf),
+            unavailable: self.unavailable_images.clone(),
+        };
         let blocks = self.preview.iter().enumerate().map(|(i, item)| {
-            container(markdown::item(&PreviewViewer, settings, item, i))
+            container(markdown::item(&viewer, settings, item, i))
                 .id(preview_sync::block_id(i))
                 .into()
         });

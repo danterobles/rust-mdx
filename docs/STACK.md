@@ -30,7 +30,7 @@ components = ["rustfmt", "clippy"]
 | `iced` | `0.14` | `tokio`, `highlighter`, `markdown`, `image`, `svg`, `wgpu`, `tiny-skia` (fallback), `crisp`, `x11`, `wayland`, `advanced` (ADR 0007: medir bloques de la vista previa) | Framework UI |
 | `rfd` | `0.18` | default (`xdg-portal`, `wayland`); 0.18 no tiene feature `tokio` | Diálogos nativos de abrir/guardar |
 | `open` | `5.4`| — | Abrir enlaces y "revelar en el sistema" |
-| `arboard` | `3.7`| `image-data` | Pegar imágenes del portapapeles (US-4.4) |
+| `arboard` | `3.7`| `image-data` | Pegar imágenes del portapapeles (US-4.4, ADR 0008) |
 | `anyhow` | `1` | — | Errores en el borde de la app |
 | `tokio` | `1` | `rt` (vía workspace) | `spawn_blocking` para parsear la vista previa fuera del hilo de UI |
 | `tracing` | `0.1` | — | Logs |
@@ -54,6 +54,7 @@ components = ["rustfmt", "clippy"]
 | `xxhash-rust` | `0.8`| `xxh3` | Hash de contenido (dirty state) |
 | `thiserror` | `2` | — | Errores tipados |
 | `tokio` | `1` | `fs`, `rt`, `sync` | I/O async |
+| `image` | `0.25` | `default-features = false`, `png` | Codificar PNG de las imágenes pegadas (US-4.4, ADR 0008) |
 | `tokio-util` | `0.7`| — | `CancellationToken` para búsqueda |
 | `futures` | `0.3` | — | `Stream` del watcher/búsqueda |
 | `tracing` | `0.1` | — | Logs |

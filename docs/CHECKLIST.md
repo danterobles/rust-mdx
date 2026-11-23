@@ -150,8 +150,8 @@
 - [x] AC2 Snapshot test 🧪 — `export::tests::snapshot_of_the_exported_body`, `snapshot_of_the_whole_document` (`insta`)
 
 ### US-4.4 Imágenes
-- [ ] AC1 Imágenes relativas en preview 👁
-- [ ] AC2 Pegar imagen → `./assets/` 🧪 + 👁
+- [~] AC1 Imágenes relativas en preview 👁 (🧪 `assets::tests::relative_images_resolve_*`, `remote_unsupported_*`, `app::preview::tests::only_missing_remote_*`; fixture `fixtures/imagenes.md`; verificación visual pendiente)
+- [~] AC2 Pegar imagen → `./assets/` 🧪 + 👁 (🧪 `assets::tests::pasted_images_are_saved_*`, `png_encoding_roundtrips_*`, `asset_names_*`, `app::tests::a_saved_image_is_inserted_*`, `editor::tests::command_v_*`; el pegado real desde el portapapeles del SO: 👁 pendiente)
 
 ### US-4.5 Zoom
 - [x] AC1 Ctrl/Cmd +/-/0 👁

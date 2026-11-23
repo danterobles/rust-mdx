@@ -305,3 +305,13 @@ Decisiones y límites:
 - Nueva dependencia `comrak 1.2` (ya prevista en STACK, `default-features = false`) → licencia transitiva `Unicode-DFS-2016` (de `finl_unicode`) añadida a `deny.toml` y STACK §8, equivalente a `Unicode-3.0`.
 - `app/mod.rs`: `view` se dividió en `editor_pane`/`preview_pane` por límite de líneas de clippy.
 - Verificación 👁 AC1 confirmada manualmente por el propietario el 2026-11-23.
+
+## US-4.4 Imágenes — 🟡 implementada, pendiente verificación 👁 AC1 y AC2 (rama feat/us-4.4-imagenes)
+Plan: `mdx-core::assets` (rutas, nombres, PNG, guardado), visor de imágenes en la vista previa, `Cmd/Ctrl+V` inteligente en el editor, `arboard` en un hilo aparte; ADR 0008; fixtures `fixtures/imagenes.md` y `fixtures/assets/`.
+- AC1 👁 el visor de la vista previa (`PreviewViewer::image`) resuelve `ruta/relativa.png` contra la carpeta del documento (decodifica `%20`, quita `?` y `#`), dibuja `png/jpg/gif/webp/bmp` con el widget de imagen (escalado hacia abajo al ancho del panel) y `svg` con el widget vectorial. Remotas (`http`, `https`, `data:`…), inexistentes o de otro tipo muestran «Imagen no disponible: …». La existencia se comprueba al parsear (en el hilo de fondo), no en `view`. Si el documento se guarda en otra carpeta se vuelve a parsear.
+- AC2 🧪/👁 con el editor enfocado, `Cmd/Ctrl+V` consulta el portapapeles (hilo aparte): con imagen → `assets/AAAAMMDD-N.png` (N = primer número libre del día, sin sobrescribir) y se inserta `![](assets/…)` en el cursor (una sola edición deshacible); sin imagen → pegado de texto normal con saltos de línea normalizados. Otros campos de texto no se ven afectados. Documento sin guardar → aviso para guardarlo primero.
+Decisiones y límites:
+- Fecha de los nombres en **UTC** (sin dependencia de fechas); cerca de la medianoche local puede diferir del día local.
+- Remotas no se descargan (sin red en la app). No se incrustan imágenes en el HTML exportado (US-4.3).
+- Linux: `arboard` puede requerir su backend Wayland/X11; a verificar en el QA de F5.
+- Solo se pega la **primera** imagen/captura del portapapeles; archivos copiados desde el Finder (rutas) no se interpretan como imagen.
