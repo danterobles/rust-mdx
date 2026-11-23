@@ -90,10 +90,10 @@
 - [x] AC3 Resaltado del activo 👁
 
 ### US-2.3 Operaciones de archivo
-- [ ] AC1 Menú contextual completo 👁
-- [ ] AC2 Eliminar → papelera con confirmación 🧪 + 👁
-- [ ] AC3 Renombrar actualiza pestaña 🧪
-- [ ] AC4 Validación de nombres 🧪
+- [x] AC1 Menú contextual completo 👁
+- [x] AC2 Eliminar → papelera con confirmación 🧪 + 👁 — `fileops::tests::trash_goes_through_the_injected_trasher_and_reports_errors`; envío real a la papelera verificado a mano
+- [x] AC3 Renombrar actualiza pestaña 🧪 — `app::tests::renaming_the_open_file_updates_its_path`, `renaming_a_parent_folder_rebases_the_open_file`, `fileops::tests::rebase_path_for_open_documents`
+- [x] AC4 Validación de nombres 🧪 — `fileops::tests::validates_names`, `invalid_name_leaves_disk_untouched`, `create_file_adds_md_and_never_overwrites`, `rename_moves_file_and_refuses_duplicates`, `app::tests::invalid_name_shows_inline_error_*`, `duplicate_name_error_from_disk_*`
 
 ### US-2.4 Cambios externos
 - [ ] AC1 Árbol refleja cambios 🧪

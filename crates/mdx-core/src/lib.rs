@@ -8,6 +8,7 @@
 
 pub mod document;
 pub mod error;
+pub mod fileops;
 pub mod history;
 pub mod io;
 pub mod link;
