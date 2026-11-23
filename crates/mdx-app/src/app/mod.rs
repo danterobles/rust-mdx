@@ -24,8 +24,7 @@ use iced::widget::{
     tooltip,
 };
 use iced::{
-    Element, Event, Font, Length, Subscription, Task, Theme, event, highlighter, keyboard, time,
-    window,
+    Element, Event, Font, Length, Subscription, Task, Theme, event, keyboard, time, window,
 };
 use mdx_core::config::{Config, LoadedConfig};
 use mdx_core::document::count_words;
@@ -54,6 +53,7 @@ use crate::shortcuts::{self, ShortcutAction};
 use crate::state::tabs::Tabs;
 use crate::statusbar::{Stats, display_col};
 use crate::strings;
+use crate::theme;
 
 /// Visor de Markdown por defecto; solo define cómo se convierte un enlace en mensaje.
 struct PreviewViewer;
@@ -109,6 +109,8 @@ pub struct App {
     find: FindState,
     ws_search: WorkspaceSearchState,
     config: Config,
+    /// Modo claro/oscuro que informa el sistema operativo (para `theme = "system"`).
+    system_mode: iced::theme::Mode,
     /// Fuente del editor resuelta desde `[editor] font_family`.
     editor_font: Font,
     sess: SessionState,
@@ -256,6 +258,7 @@ pub enum Message {
     LayoutChanged,
     SetSidebar(Sidebar),
     GoToLine(usize),
+    SystemTheme(iced::theme::Mode),
     ConfigLoaded(LoadedConfig),
     ConfigReloaded(LoadedConfig),
     ConfigFileReady(Result<PathBuf, CoreError>),
@@ -325,7 +328,8 @@ impl App {
             }
             (false, None) => (Task::none(), None),
         };
-        let boot = Task::batch([cli_boot, session_boot]);
+        let system_theme = iced::system::theme().map(Message::SystemTheme);
+        let boot = Task::batch([cli_boot, session_boot, system_theme]);
         (
             Self {
                 explorer: ExplorerState {
@@ -347,6 +351,7 @@ impl App {
                 pin_on_load,
                 pending_goto: None,
                 config: Config::default(),
+                system_mode: iced::theme::Mode::None,
                 editor_font: Font::MONOSPACE,
                 sess: SessionState {
                     files: app_files,
@@ -393,9 +398,9 @@ impl App {
         )
     }
 
-    #[allow(clippy::unused_self)]
+    /// Tema activo: el del ajuste `appearance.theme` o, en modo «sistema», el del SO.
     pub fn theme(&self) -> Theme {
-        Theme::Light
+        theme::resolve(self.config.appearance.theme, self.system_mode)
     }
 
     #[allow(clippy::unused_self)]
@@ -434,6 +439,7 @@ impl App {
             },
             self.watch_subscriptions(),
             window::resize_events().map(|_| Message::LayoutChanged),
+            iced::system::theme_changes().map(Message::SystemTheme),
             if self.preview_pending {
                 time::every(PREVIEW_TICK).map(Message::PreviewTick)
             } else {
@@ -505,6 +511,11 @@ impl App {
             | Message::PreviewParsed(..)
             | Message::PreviewMeasured(..)
             | Message::SetSyncScroll(_)) => self.update_preview(m),
+            Message::SystemTheme(mode) => {
+                tracing::debug!(?mode, "modo de tema informado por el sistema");
+                self.system_mode = mode;
+                Task::none()
+            }
             Message::EscapePressed => {
                 if self.find.open {
                     self.close_find();
@@ -777,7 +788,7 @@ impl App {
                             .font(self.editor_font)
                             .size(editor::font_px(self.config.editor.font_size))
                             .wrapping(editor::wrapping(self.config.editor.line_wrap))
-                            .highlight("markdown", highlighter::Theme::InspiredGitHub)
+                            .highlight("markdown", theme::highlight_theme(&theme))
                             .height(Length::Fill),
                     )
                     .into(),

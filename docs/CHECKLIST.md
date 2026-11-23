@@ -136,8 +136,8 @@
 ## Fase 4 — Pulido → v0.5.0
 
 ### US-4.1 Temas
-- [ ] AC1 Claro / oscuro / sistema 👁
-- [ ] AC2 Preview con paleta del tema 👁
+- [~] AC1 Claro / oscuro / sistema 👁 (🧪 `theme::tests::*`, `app::tests::the_theme_defaults_to_the_system_mode_*`, `an_explicit_theme_in_the_config_*`; el SO informa su modo (verificado: `Light`); verificación visual pendiente)
+- [~] AC2 Preview con paleta del tema 👁 (la vista previa, el esquema, el explorador y el resaltado del editor se dibujan con el tema activo; verificación visual pendiente)
 
 ### US-4.2 Configuración
 - [x] AC1 `config.toml` en dir de SO 🧪 — `paths::tests::*`, `config::tests::ensure_file_creates_the_template_once_and_never_overwrites`

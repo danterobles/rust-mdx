@@ -275,3 +275,11 @@ Decisiones:
 - `FilesConfig` lleva `#[allow(clippy::struct_excessive_bools)]`: refleja el esquema fijado en DATA.
 - No hay recarga por cambios externos de `config.toml` (solo al guardarlo desde Mdx); no está en el PRD.
 - Verificación 👁 AC3 confirmada manualmente por el propietario el 2026-11-23.
+
+## US-4.1 Temas — 🟡 implementada, pendiente verificación 👁 AC1 y AC2 (rama feat/us-4.1-temas)
+Plan: `theme.rs` (resolución del tema y del tema de resaltado), modo del sistema vía `iced::system::{theme, theme_changes}`, ajuste `appearance.theme` de US-4.2.
+- AC1 👁 `system` (por defecto) sigue al SO —consulta el modo al arrancar y se suscribe a sus cambios, sin reiniciar—; `light`/`dark` lo fijan. Si el SO no informa su modo se usa el claro. Cambiar el ajuste y guardar `config.toml` lo aplica al instante (US-4.2 AC3). En este Mac el SO informa `Light`.
+- AC2 👁 toda la interfaz sale del `Theme` de iced (`markdown::Settings::from(&theme)` para la vista previa) y el resaltado del editor cambia con él (`InspiredGitHub` en claro, `Base16Mocha` en oscuro).
+Decisiones:
+- Solo dos temas (claro/oscuro) como pide el PRD; sin selector en la interfaz: se cambia en `config.toml`.
+- Pendiente de comprobar a mano: contraste de los colores propios (resaltado de elementos del explorador, banners, casillas) en oscuro, y el resaltado de bloques de código de la vista previa en oscuro.

@@ -1590,7 +1590,7 @@ fn a_stale_pending_position_is_dropped_when_another_file_opens_or_loading_fails(
 
 // ------------------------------------------------ US-3.5: autoguardado y sesión
 
-use mdx_core::config::{ConfigWarning, LoadedConfig};
+use mdx_core::config::{ConfigWarning, LoadedConfig, ThemeSetting};
 use mdx_core::session::{Boot, RestorePlan, Session};
 
 fn with_autosave(app: &mut App, on: bool) {
@@ -2132,4 +2132,52 @@ fn the_config_shortcut_reports_when_there_is_no_config_directory() {
             .as_ref()
             .is_some_and(|s| s.text.contains("Permiso"))
     );
+}
+
+// ------------------------------------------------------------ US-4.1: temas
+
+#[test]
+fn the_theme_defaults_to_the_system_mode_and_follows_its_changes() {
+    // AC1
+    let (mut app, _) = App::new(None);
+    assert_eq!(app.config.appearance.theme, ThemeSetting::System);
+    assert_eq!(app.theme(), Theme::Light, "sin información del SO: claro");
+    let _ = app.update(Message::SystemTheme(iced::theme::Mode::Dark));
+    assert_eq!(app.theme(), Theme::Dark);
+    let _ = app.update(Message::SystemTheme(iced::theme::Mode::Light));
+    assert_eq!(app.theme(), Theme::Light);
+}
+
+#[test]
+fn an_explicit_theme_in_the_config_overrides_the_system() {
+    // AC1: claro y oscuro fijos, aunque el SO diga otra cosa.
+    let (mut app, _) = App::new(None);
+    let _ = app.update(Message::SystemTheme(iced::theme::Mode::Light));
+    let _ = app.update(Message::ConfigLoaded(loaded(
+        "[appearance]\ntheme = \"dark\"\n",
+    )));
+    assert_eq!(app.theme(), Theme::Dark);
+    let _ = app.update(Message::SystemTheme(iced::theme::Mode::Dark));
+    let _ = app.update(Message::ConfigReloaded(loaded(
+        "[appearance]\ntheme = \"light\"\n",
+    )));
+    assert_eq!(
+        app.theme(),
+        Theme::Light,
+        "cambia al guardar la configuración"
+    );
+    let _ = app.update(Message::ConfigReloaded(loaded(
+        "[appearance]\ntheme = \"system\"\n",
+    )));
+    assert_eq!(app.theme(), Theme::Dark, "vuelve a seguir al sistema");
+}
+
+#[test]
+fn an_invalid_theme_value_falls_back_to_the_system_default() {
+    let (mut app, _) = App::new(None);
+    let _ = app.update(Message::SystemTheme(iced::theme::Mode::Dark));
+    // TOML con un tema desconocido → configuración por defecto (INV-6) → sigue al sistema.
+    assert!(mdx_core::config::Config::parse("[appearance]\ntheme = \"neón\"\n").is_err());
+    let _ = app.update(Message::ConfigReloaded(LoadedConfig::default()));
+    assert_eq!(app.theme(), Theme::Dark);
 }
