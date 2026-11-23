@@ -1854,6 +1854,7 @@ dependencies = [
  "mdx-core",
  "open",
  "rfd",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]

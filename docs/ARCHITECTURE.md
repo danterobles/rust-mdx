@@ -149,7 +149,7 @@ sequenceDiagram
 
 1. `Edit(id, action)` → `content.perform(action)`; si es edición, marcar `preview_pending = true` y guardar `last_edit = Instant::now()`.
 2. `subscription` emite `PreviewTick` cada 25 ms solo mientras `preview_pending`.
-3. En `PreviewTick`, si `now - last_edit ≥ 150 ms` → re-parsear (incremental cuando sea posible) preview y outline; `preview_pending = false`.
+3. En `PreviewTick`, si `now - last_edit ≥ 150 ms` → lanzar el parseo en un `Task` con `spawn_blocking` (la UI no se bloquea con documentos grandes); `PreviewParsed(generación, items)` descarta resultados obsoletos; `preview_pending = false`.
 
 ### 6.4 Cambio externo
 
