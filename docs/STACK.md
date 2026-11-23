@@ -9,7 +9,7 @@
 
 | Herramienta | Versión | Notas |
 |---|---|---|
-| Rust | stable, edition 2024 | MSRV = la que requiera iced 0.14 🔎; fijar en `rust-toolchain.toml` y `rust-version` del workspace |
+| Rust | stable, edition 2024 | MSRV = **1.92** (la exige `rfd 0.18`; iced 0.14 pide 1.88); fijada en `rust-toolchain.toml` y `rust-version` del workspace |
 | Cargo resolver | `"3"` | |
 | rustfmt | stable | `rustfmt.toml` en raíz |
 | clippy | stable | `-D warnings` en CI |
@@ -28,9 +28,9 @@ components = ["rustfmt", "clippy"]
 | Crate | Versión | Features | Para qué |
 |---|---|---|---|
 | `iced` | `0.14` | `tokio`, `highlighter`, `markdown`, `image`, `svg`, `wgpu`, `tiny-skia` (fallback) | Framework UI |
-| `rfd` | 🔎 | `tokio` | Diálogos nativos de abrir/guardar |
-| `open` | 🔎 | — | Abrir enlaces y "revelar en el sistema" |
-| `arboard` | 🔎 | `image-data` | Pegar imágenes del portapapeles (US-4.4) |
+| `rfd` | `0.18`| `tokio` | Diálogos nativos de abrir/guardar |
+| `open` | `5.4`| — | Abrir enlaces y "revelar en el sistema" |
+| `arboard` | `3.7`| `image-data` | Pegar imágenes del portapapeles (US-4.4) |
 | `anyhow` | `1` | — | Errores en el borde de la app |
 | `tracing` | `0.1` | — | Logs |
 | `tracing-subscriber` | `0.3` | `env-filter` | Salida de logs (`RUST_LOG`) |
@@ -41,19 +41,19 @@ components = ["rustfmt", "clippy"]
 | Crate | Versión | Features | Para qué |
 |---|---|---|---|
 | `pulldown-cmark` | `0.13` | default | Outline y mapeo de líneas (preview usa el de iced) |
-| `comrak` | 🔎 (última 0.x) | `default-features = false` + lo necesario | Exportación HTML GFM |
-| `ignore` | 🔎 | — | Recorrido de directorios respetando `.gitignore` |
-| `notify` | 🔎 | — | Watcher del sistema de archivos |
-| `notify-debouncer-full` | 🔎 | — | Debounce de eventos |
-| `trash` | 🔎 | — | Enviar a la papelera |
-| `directories` | 🔎 | — | Rutas de config/estado por SO |
+| `comrak` | `1.2`| `default-features = false` + lo necesario | Exportación HTML GFM |
+| `ignore` | `0.4`| — | Recorrido de directorios respetando `.gitignore` |
+| `notify` | `9`| — | Watcher del sistema de archivos |
+| `notify-debouncer-full` | `0.8`| — | Debounce de eventos |
+| `trash` | `5.4`| — | Enviar a la papelera |
+| `directories` | `6`| — | Rutas de config/estado por SO |
 | `serde` | `1` | `derive` | Serialización |
-| `toml` | 🔎 | — | `config.toml`, `session.toml` |
+| `toml` | `1.2`| — | `config.toml`, `session.toml` |
 | `regex` | `1` | — | Búsqueda |
-| `xxhash-rust` | 🔎 | `xxh3` | Hash de contenido (dirty state) |
+| `xxhash-rust` | `0.8`| `xxh3` | Hash de contenido (dirty state) |
 | `thiserror` | `2` | — | Errores tipados |
 | `tokio` | `1` | `fs`, `rt`, `sync` | I/O async |
-| `tokio-util` | 🔎 | — | `CancellationToken` para búsqueda |
+| `tokio-util` | `0.7`| — | `CancellationToken` para búsqueda |
 | `futures` | `0.3` | — | `Stream` del watcher/búsqueda |
 | `tracing` | `0.1` | — | Logs |
 
@@ -90,7 +90,7 @@ version = "0.0.0"          # ÚNICA fuente de versión; ver CLAUDE.md §Versiona
 edition = "2024"
 license = "TBD"            # pregunta abierta del PRD
 repository = "TBD"
-rust-version = "TBD"       # 🔎 MSRV de iced 0.14
+rust-version = "1.92"      # MSRV: rfd 0.18 (iced 0.14: 1.88)
 
 [workspace.dependencies]
 iced = { version = "0.14", default-features = false, features = [...] }

@@ -1,0 +1,63 @@
+[workspace]
+resolver = "3"
+members = ["crates/mdx-core", "crates/mdx-app", "xtask"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "TBD"
+repository = "TBD"
+rust-version = "1.92"
+
+[workspace.dependencies]
+# Internas
+mdx-core = { path = "crates/mdx-core" }
+
+# UI (mdx-app) — versiones fijadas en US-0.1; se activan en US-0.2
+iced = { version = "0.14", default-features = false, features = ["tokio", "highlighter", "markdown", "image", "svg", "wgpu", "tiny-skia"] }
+rfd = { version = "0.18", default-features = false, features = ["tokio"] }
+open = "5.4"
+arboard = { version = "3.7", features = ["image-data"] }
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Núcleo (mdx-core)
+pulldown-cmark = "0.13"
+comrak = { version = "1.2", default-features = false }
+ignore = "0.4"
+notify = "9"
+notify-debouncer-full = "0.8"
+trash = "5.4"
+directories = "6"
+serde = { version = "1", features = ["derive"] }
+toml = "1.2"
+regex = "1"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+thiserror = "2"
+tokio = { version = "1", features = ["fs", "rt", "sync"] }
+tokio-util = "0.7"
+futures = "0.3"
+
+# Desarrollo
+tempfile = "3"
+insta = { version = "1.49", features = ["toml", "yaml"] }
+pretty_assertions = "1"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[profile.dev.package."*"]
+opt-level = 2
