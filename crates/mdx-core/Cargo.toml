@@ -9,7 +9,10 @@ publish = false
 description = "Lógica pura de Mdx (sin UI)"
 
 [dependencies]
+futures.workspace = true
 ignore.workspace = true
+notify.workspace = true
+notify-debouncer-full.workspace = true
 thiserror.workspace = true
 trash.workspace = true
 tokio.workspace = true
@@ -17,7 +20,7 @@ xxhash-rust.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 pretty_assertions.workspace = true
 
 [lints]

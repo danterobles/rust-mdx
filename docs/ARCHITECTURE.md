@@ -64,7 +64,7 @@ flowchart LR
 | `document` | `Document`, `LineEnding`, `DiskState`, `DocumentId` | Puro, sin I/O |
 | `io` | `read_document(path)`, `write_atomic(path, bytes)`, `save_text(path, text, line_ending, has_bom) -> SavedInfo` | Async (`tokio::fs`); temp en mismo dir + `rename` + `fsync` |
 | `workspace` | `Workspace`, `FileNode`, `load_children(dir, filters)`, operaciones (crear, renombrar, papelera) | Usa `ignore::WalkBuilder` con `max_depth(1)` para carga perezosa |
-| `watcher` | `watch(root) -> impl Stream<Item = FsEvent>` | `notify-debouncer-full`, 200 ms; filtra por `TreeFilters` |
+| `watcher` | `watch(root, recursive) -> FsWatcher` (`Stream<Item = Vec<FsEvent>>`), `convert` | `notify-debouncer-full`, 200 ms; descarta `.git` y accesos; se detiene al soltarlo |
 | `history` | `History`, `Patch`, `offset_to_pos` | Deshacer/rehacer por diferencias (ADR 0005); sin dependencias de UI |
 | `fileops` | `validate_name`, `create_file`, `create_dir`, `rename`, `move_to_trash`, `reveal`, `rebase_path` | Operaciones sobre archivos del usuario; eliminar = papelera (`trash`), nunca `remove_*` |
 | `link` | `classify(url, base_dir) -> LinkTarget` | Enlaces de la preview: externo, Markdown local o no soportado |

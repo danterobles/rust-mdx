@@ -152,3 +152,19 @@ Decisiones:
 - «Revelar»: `open -R` (macOS), `explorer /select,` (Windows), `xdg-open <carpeta>` (Linux).
 - `update` se dividió: `update_explorer` agrupa los mensajes del explorador (límite de líneas de clippy).
 - Verificación 👁 AC1 y AC2 confirmada manualmente por el propietario el 2026-11-23.
+
+## US-2.4 Cambios externos — ✅ completa (rama feat/us-2.4-cambios-externos)
+Plan: `mdx-core::watcher` (notify-debouncer-full 200 ms → `FsEvent`), `mdx-app/app.rs` (subscripciones `run_with`, `handle_fs`, `handle_disk_inspected`, banner), `explorer::dirs_to_reload`.
+- AC1 🧪 `watcher::tests::*` + watcher real sobre `TempDir` (macOS). El árbol relee solo los directorios **ya cargados** que contienen el cambio.
+- AC2 🧪 hash del disco ≠ `saved_hash` y documento limpio → se sustituye el contenido en silencio (se vacía el historial de deshacer, porque ya no corresponde al texto).
+- AC3 🧪/👁 documento sucio → `DiskState::ChangedExternally` y banner con **Recargar** (descarta lo local) y **Conservar mío** (el disco pasa a ser la referencia de «guardado»; el texto sigue sin guardar y el siguiente guardado lo sobrescribe a conciencia). Un segundo aviso con el mismo contenido de disco no vuelve a molestar.
+- AC4 🧪/👁 el archivo desaparece → `DiskState::Deleted`, título «a.md (eliminado) — Mdx» y aviso en la barra de estado; el contenido se conserva y guardar lo restituye. La marca va en el título porque aún no hay barra de pestañas (US-3.1).
+- AC5 🧪 INV-3: se compara el hash del disco con `saved_hash` (cubre nuestros propios guardados atómicos y también ediciones posteriores al guardado).
+Decisiones:
+- Se vigila la carpeta abierta (recursivo) y, si el documento está **fuera** de ella (CLI/Ctrl+O), su directorio (no recursivo): sin esto los AC2–AC5 no cubrirían los archivos abiertos sin carpeta.
+- Toda decisión sobre el documento se toma releyendo el disco en un `Task` (`DiskInspected`), no confiando en el tipo de evento: robusto ante las diferencias entre FSEvents/inotify/ReadDirectoryChanges y ante carreras con renombrados propios (US-2.3). Los resultados de lecturas viejas (otro documento o ruta) se ignoran.
+- Se descartan eventos dentro de `.git`, accesos y metadatos.
+- Un archivo borrado que reaparece con otro contenido se trata como cambio externo (recarga silenciosa o banner).
+- Si el observador no puede iniciarse se informa en la barra de estado.
+- Solo probado en macOS (FSEvents). Linux (inotify) y Windows quedan para el QA de F5 / CI.
+- Verificación 👁 AC3 y AC4 confirmada manualmente por el propietario el 2026-11-23.

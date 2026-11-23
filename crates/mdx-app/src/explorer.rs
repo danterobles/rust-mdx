@@ -7,6 +7,7 @@ use iced::widget::{
     Column, Id, Row, button, checkbox, container, mouse_area, scrollable, text, text_input,
 };
 use iced::{Element, Length, Theme};
+use mdx_core::watcher::FsEvent;
 use mdx_core::workspace::{Children, FileNode, NodeKind, TreeFilters, VisibleNode, Workspace};
 
 use crate::app::{FilterKind, Message};
@@ -66,6 +67,29 @@ pub struct Prompt {
 
 /// Identificador del campo de nombre (para enfocarlo al abrirlo).
 pub const PROMPT_ID: &str = "explorer-prompt";
+
+/// Directorios cargados del árbol que contienen alguno de los cambios de `events`
+/// (sin duplicados): son los que hay que releer tras un cambio externo.
+#[must_use]
+pub fn dirs_to_reload(ws: &Workspace, events: &[FsEvent]) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    for path in events.iter().flat_map(FsEvent::paths) {
+        let Some(parent) = path.parent() else {
+            continue;
+        };
+        let loaded = matches!(
+            ws.node(parent).map(|n| &n.kind),
+            Some(NodeKind::Dir {
+                children: Children::Loaded(_),
+                ..
+            })
+        );
+        if loaded && !dirs.iter().any(|d| d == parent) {
+            dirs.push(parent.to_path_buf());
+        }
+    }
+    dirs
+}
 
 /// Teclas de navegación del árbol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -483,6 +507,28 @@ mod tests {
             Nav::Toggle(PathBuf::from("/a"))
         );
         assert_eq!(nav(None, ExplorerKey::Enter), Nav::None);
+    }
+
+    #[test]
+    fn reloads_only_loaded_parent_dirs_without_duplicates() {
+        // US-2.4 AC1
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::create_dir_all(dir.path().join("a/b")).unwrap();
+        std::fs::write(dir.path().join("a/x.md"), "x").unwrap();
+        let mut ws = Workspace::open(dir.path(), TreeFilters::default()).unwrap();
+        let a = ws.root.join("a");
+        assert!(ws.begin_expand(&a));
+        ws.set_children(&a, mdx_core::workspace::load_children(&a, &ws.filters));
+        let events = [
+            FsEvent::Created(a.join("nuevo.md")),
+            FsEvent::Removed(a.join("x.md")),
+            FsEvent::Modified(a.join("b").join("profundo.md")), // `b` no está cargada
+            FsEvent::Renamed {
+                from: ws.root.join("r.md"),
+                to: ws.root.join("s.md"),
+            },
+        ];
+        assert_eq!(dirs_to_reload(&ws, &events), [a, ws.root.clone()]);
     }
 
     #[test]

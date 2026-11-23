@@ -55,3 +55,12 @@ pub const DELETE_CONFIRM: &str = "Mover a la papelera";
 pub const STATUS_CREATED: &str = "Creado";
 pub const STATUS_RENAMED: &str = "Renombrado";
 pub const STATUS_TRASHED: &str = "Enviado a la papelera";
+
+pub const DELETED_MARK: &str = " (eliminado)";
+pub const BANNER_CHANGED: &str = "El archivo cambió en disco.";
+pub const BANNER_RELOAD: &str = "Recargar";
+pub const BANNER_KEEP: &str = "Conservar mío";
+pub const STATUS_DELETED_ON_DISK: &str =
+    "El archivo se eliminó del disco; su contenido se conserva y puede volver a guardarlo.";
+pub const STATUS_RELOADED: &str = "Archivo recargado desde el disco";
+pub const STATUS_WATCH_FAILED: &str = "No se pudo vigilar la carpeta";

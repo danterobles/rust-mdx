@@ -3,7 +3,10 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use iced::widget::{Column, Row, container, markdown, pane_grid, scrollable, text, text_editor};
+use futures::{SinkExt, Stream, StreamExt};
+use iced::widget::{
+    Column, Row, button, container, markdown, pane_grid, scrollable, text, text_editor,
+};
 use iced::{
     Element, Event, Font, Length, Subscription, Task, Theme, event, highlighter, keyboard, time,
     window,
@@ -13,8 +16,9 @@ use mdx_core::fileops;
 use mdx_core::history::History;
 use mdx_core::io::SavedInfo;
 use mdx_core::link::{self, LinkTarget};
+use mdx_core::watcher::{self, FsEvent};
 use mdx_core::workspace::{self, FileNode, TreeFilters, Workspace};
-use mdx_core::{CoreError, Document};
+use mdx_core::{CoreError, DiskState, Document, DocumentId};
 
 use crate::editor;
 use crate::explorer::{
@@ -30,6 +34,8 @@ use crate::strings;
 pub struct App {
     explorer: ExplorerState,
     tabs: Tabs,
+    /// Versión del disco pendiente de resolver cuando hay conflicto (banner).
+    external: Option<Document>,
     /// Ruta cuyo doble clic (o apertura explícita) llegó mientras se cargaba: queda fijada.
     pin_on_load: Option<PathBuf>,
     panes: pane_grid::State<PaneKind>,
@@ -68,6 +74,15 @@ pub enum PendingAction {
     New,
     Open,
     OpenPath(PathBuf),
+}
+
+/// Elección del usuario ante un conflicto con el disco.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConflictChoice {
+    /// Descarta los cambios locales y carga la versión del disco.
+    Reload,
+    /// Conserva el texto local; el disco pasa a ser la referencia de «guardado».
+    KeepMine,
 }
 
 /// Resultado de una operación de archivos.
@@ -129,6 +144,10 @@ pub enum Message {
     DeleteAnswered(PathBuf, bool),
     OpDone(Result<OpOutcome, CoreError>),
     ToggleFilter(FilterKind),
+    Fs(Vec<FsEvent>),
+    WatchFailed(String),
+    DiskInspected(DocumentId, PathBuf, Result<Document, CoreError>),
+    ResolveConflict(ConflictChoice),
     PreviewParsed(u64, Vec<markdown::Item>),
     LinkClicked(String),
     LinkOpened(Result<(), String>),
@@ -170,6 +189,7 @@ impl App {
                 },
                 tabs,
                 pin_on_load,
+                external: None,
                 panes: initial_panes(),
                 doc,
                 content: text_editor::Content::new(),
@@ -191,8 +211,13 @@ impl App {
 
     pub fn title(&self) -> String {
         let mark = if self.dirty { strings::DIRTY_MARK } else { "" };
+        let deleted = if self.doc.disk_state == DiskState::Deleted {
+            strings::DELETED_MARK
+        } else {
+            ""
+        };
         format!(
-            "{mark}{} — {}",
+            "{mark}{}{deleted} — {}",
             self.doc.display_name(strings::UNTITLED),
             strings::APP_TITLE
         )
@@ -225,12 +250,33 @@ impl App {
                 _ => None,
             }),
             window::close_requests().map(|_| Message::CloseRequested),
+            self.watch_subscriptions(),
             if self.preview_pending && self.preview_visible {
                 time::every(PREVIEW_TICK).map(Message::PreviewTick)
             } else {
                 Subscription::none()
             },
         ])
+    }
+
+    /// Vigila la carpeta abierta (recursivo) y, si el documento está fuera de ella, su directorio.
+    fn watch_subscriptions(&self) -> Subscription<Message> {
+        let mut subs = Vec::new();
+        let root = self.explorer.workspace.as_ref().map(|ws| ws.root.clone());
+        if let Some(root) = &root {
+            subs.push(Subscription::run_with(root.clone(), |root| {
+                watcher_stream(root.clone(), true)
+            }));
+        }
+        if let Some(dir) = self.doc.path.as_deref().and_then(Path::parent) {
+            let inside = root.as_deref().is_some_and(|r| dir.starts_with(r));
+            if !inside {
+                subs.push(Subscription::run_with(dir.to_path_buf(), |dir| {
+                    watcher_stream(dir.clone(), false)
+                }));
+            }
+        }
+        Subscription::batch(subs)
     }
 
     // iced exige `Message` por valor; crecerá con las próximas historias.
@@ -270,6 +316,15 @@ impl App {
                 }
                 Task::none()
             }
+            Message::Fs(events) => self.handle_fs(&events),
+            Message::WatchFailed(err) => {
+                self.set_status(format!("{}: {err}", strings::STATUS_WATCH_FAILED), true);
+                Task::none()
+            }
+            Message::DiskInspected(id, path, result) => {
+                self.handle_disk_inspected(id, &path, result)
+            }
+            Message::ResolveConflict(choice) => self.resolve_conflict(choice),
             Message::PreviewParsed(generation, items) => {
                 if generation == self.preview_gen {
                     self.preview = items;
@@ -377,6 +432,119 @@ impl App {
             }
             Message::ToggleFilter(kind) => self.toggle_filter(kind),
             _ => Task::none(),
+        }
+    }
+
+    /// Cambios externos: refresca el árbol (AC1) y revisa el documento abierto (AC2–AC5).
+    fn handle_fs(&mut self, events: &[FsEvent]) -> Task<Message> {
+        let mut tasks = Vec::new();
+        let filters = self.explorer.filters;
+        if let Some(ws) = &self.explorer.workspace {
+            for dir in explorer::dirs_to_reload(ws, events) {
+                tasks.push(Task::perform(
+                    workspace::load_children_async(dir.clone(), filters),
+                    move |result| Message::DirLoaded(dir.clone(), result),
+                ));
+            }
+        }
+        if let Some(path) = self.doc.path.clone()
+            && events.iter().any(|e| e.paths().contains(&path.as_path()))
+        {
+            let id = self.doc.id;
+            tasks.push(Task::perform(
+                async move {
+                    let result = mdx_core::io::read_document(&path).await;
+                    (id, path, result)
+                },
+                |(id, path, result)| Message::DiskInspected(id, path, result),
+            ));
+        }
+        Task::batch(tasks)
+    }
+
+    /// Decide qué hacer con el documento abierto según lo que hay ahora en disco (DATA §3.2).
+    fn handle_disk_inspected(
+        &mut self,
+        id: DocumentId,
+        path: &Path,
+        result: Result<Document, CoreError>,
+    ) -> Task<Message> {
+        // Resultado obsoleto: el documento o su ruta cambiaron mientras se leía.
+        if id != self.doc.id || self.doc.path.as_deref() != Some(path) {
+            return Task::none();
+        }
+        let disk = match result {
+            Ok(disk) => disk,
+            Err(CoreError::NotFound(_)) => {
+                // AC4: se conserva el contenido para poder volver a guardarlo.
+                if self.doc.disk_state != DiskState::Deleted {
+                    self.doc.disk_state = DiskState::Deleted;
+                    self.external = None;
+                    self.set_status(strings::STATUS_DELETED_ON_DISK.to_owned(), true);
+                }
+                return Task::none();
+            }
+            Err(err) => {
+                self.set_status(err.to_string(), true);
+                return Task::none();
+            }
+        };
+        // INV-3 / AC5: si el disco coincide con lo último guardado (p. ej. nuestro propio
+        // guardado), no hay nada que hacer.
+        if disk.saved_hash == self.doc.saved_hash {
+            if self.doc.disk_state != DiskState::InSync {
+                self.doc.disk_state = DiskState::InSync;
+                self.external = None;
+            }
+            return Task::none();
+        }
+        if self.dirty {
+            // AC3: hay cambios locales y el disco cambió → banner.
+            let already = self
+                .external
+                .as_ref()
+                .is_some_and(|e| e.saved_hash == disk.saved_hash);
+            if !already {
+                self.doc.disk_state = DiskState::ChangedExternally;
+                self.external = Some(disk);
+            }
+            return Task::none();
+        }
+        // AC2: sin cambios locales, recarga silenciosa.
+        self.apply_disk_version(disk)
+    }
+
+    /// Sustituye el contenido por la versión del disco (conserva id y ruta).
+    fn apply_disk_version(&mut self, disk: Document) -> Task<Message> {
+        self.content = text_editor::Content::with_text(&disk.text);
+        self.doc.text = disk.text;
+        self.doc.saved_hash = disk.saved_hash;
+        self.doc.disk_mtime = disk.disk_mtime;
+        self.doc.line_ending = disk.line_ending;
+        self.doc.has_bom = disk.has_bom;
+        self.doc.disk_state = DiskState::InSync;
+        self.external = None;
+        self.reset_editing_state()
+    }
+
+    fn resolve_conflict(&mut self, choice: ConflictChoice) -> Task<Message> {
+        let Some(disk) = self.external.take() else {
+            return Task::none();
+        };
+        match choice {
+            ConflictChoice::Reload => {
+                self.set_status(strings::STATUS_RELOADED.to_owned(), false);
+                self.apply_disk_version(disk)
+            }
+            ConflictChoice::KeepMine => {
+                // El disco pasa a ser la referencia: el texto local sigue «sin guardar» y el
+                // siguiente guardado sobrescribe conscientemente la versión externa.
+                self.doc.saved_hash = disk.saved_hash;
+                self.doc.disk_mtime = disk.disk_mtime;
+                self.doc.disk_state = DiskState::InSync;
+                self.dirty = self.doc.is_dirty();
+                Task::none()
+            }
         }
     }
 
@@ -857,6 +1025,8 @@ impl App {
                 self.doc.path = Some(info.path);
                 self.doc.saved_hash = Some(info.saved_hash);
                 self.doc.disk_mtime = info.mtime;
+                self.doc.disk_state = DiskState::InSync;
+                self.external = None;
                 // Se compara con el contenido actual: si se editó durante el guardado, sigue sucio.
                 self.refresh_dirty();
                 let name = self.doc.display_name(strings::UNTITLED);
@@ -891,6 +1061,28 @@ impl App {
 
     fn set_status(&mut self, text: String, is_error: bool) {
         self.status = Some(Status { text, is_error });
+    }
+
+    fn conflict_banner() -> Element<'static, Message> {
+        container(
+            Row::new()
+                .spacing(12)
+                .align_y(iced::Alignment::Center)
+                .push(text(strings::BANNER_CHANGED))
+                .push(
+                    button(text(strings::BANNER_RELOAD))
+                        .on_press(Message::ResolveConflict(ConflictChoice::Reload)),
+                )
+                .push(
+                    button(text(strings::BANNER_KEEP))
+                        .style(button::secondary)
+                        .on_press(Message::ResolveConflict(ConflictChoice::KeepMine)),
+                ),
+        )
+        .padding([6, 10])
+        .width(Length::Fill)
+        .style(container::bordered_box)
+        .into()
     }
 
     pub fn view(&self) -> Element<'_, Message> {
@@ -938,8 +1130,32 @@ impl App {
         .width(Length::Fill)
         .style(container::bordered_box);
 
-        Column::new().push(grid).push(status_bar).into()
+        let mut layout = Column::new();
+        if self.doc.disk_state == DiskState::ChangedExternally {
+            layout = layout.push(Self::conflict_banner());
+        }
+        layout.push(grid).push(status_bar).into()
     }
+}
+
+/// Flujo de eventos del sistema de archivos para una subscripción de iced.
+fn watcher_stream(path: PathBuf, recursive: bool) -> impl Stream<Item = Message> {
+    iced::stream::channel(32, async move |mut output| {
+        match watcher::watch(&path, recursive) {
+            Ok(mut watcher) => {
+                while let Some(batch) = watcher.next().await {
+                    if output.send(Message::Fs(batch)).await.is_err() {
+                        break;
+                    }
+                }
+            }
+            Err(err) => {
+                let _ = output.send(Message::WatchFailed(err.to_string())).await;
+            }
+        }
+        // El observador solo debe terminar al cancelarse la subscripción.
+        std::future::pending::<()>().await;
+    })
 }
 
 async fn ask_delete(name: String) -> bool {
@@ -1570,6 +1786,146 @@ mod tests {
         let (mut app, _) = App::new(None);
         let _ = app.update(Message::DeleteAnswered(PathBuf::from("/p/a.md"), false));
         assert!(app.status.is_none());
+    }
+
+    /// Abre `/proyecto/a.md` con `text` en disco y devuelve su ruta.
+    fn open_with(app: &mut App, text: &str) -> PathBuf {
+        let path = PathBuf::from("/proyecto/a.md");
+        let doc = Document::from_bytes(&path, text.as_bytes(), None).unwrap();
+        let _ = app.update(Message::DocumentLoaded(Ok(doc)));
+        path
+    }
+
+    fn inspect(app: &mut App, path: &Path, result: Result<Document, CoreError>) {
+        let _ = app.update(Message::DiskInspected(
+            app.doc.id,
+            path.to_path_buf(),
+            result,
+        ));
+    }
+
+    fn disk_version(path: &Path, text: &str) -> Result<Document, CoreError> {
+        Document::from_bytes(path, text.as_bytes(), None)
+    }
+
+    #[test]
+    fn external_change_on_clean_document_reloads_silently() {
+        // AC2
+        let (mut app, _) = App::new(None);
+        let path = open_with(&mut app, "viejo");
+        inspect(
+            &mut app,
+            &path,
+            disk_version(&path, "nuevo desde otra herramienta"),
+        );
+        assert_eq!(app.content.text(), "nuevo desde otra herramienta");
+        assert_eq!(app.doc.disk_state, DiskState::InSync);
+        assert_eq!(app.title(), "a.md — Mdx");
+        assert!(app.external.is_none());
+    }
+
+    #[test]
+    fn external_change_on_dirty_document_shows_conflict_banner() {
+        // AC3
+        let (mut app, _) = App::new(None);
+        let path = open_with(&mut app, "base");
+        type_char(&mut app, 'X');
+        inspect(&mut app, &path, disk_version(&path, "otra versión"));
+        assert_eq!(app.doc.disk_state, DiskState::ChangedExternally);
+        assert!(app.external.is_some());
+        assert_eq!(app.content.text(), "Xbase", "el texto local no se toca");
+    }
+
+    #[test]
+    fn conflict_reload_takes_the_disk_version() {
+        let (mut app, _) = App::new(None);
+        let path = open_with(&mut app, "base");
+        type_char(&mut app, 'X');
+        inspect(&mut app, &path, disk_version(&path, "disco"));
+        let _ = app.update(Message::ResolveConflict(ConflictChoice::Reload));
+        assert_eq!(app.content.text(), "disco");
+        assert_eq!(app.doc.disk_state, DiskState::InSync);
+        assert_eq!(app.title(), "a.md — Mdx");
+    }
+
+    #[test]
+    fn conflict_keep_mine_keeps_text_and_stays_dirty() {
+        let (mut app, _) = App::new(None);
+        let path = open_with(&mut app, "base");
+        type_char(&mut app, 'X');
+        inspect(&mut app, &path, disk_version(&path, "disco"));
+        let _ = app.update(Message::ResolveConflict(ConflictChoice::KeepMine));
+        assert_eq!(app.content.text(), "Xbase");
+        assert_eq!(app.doc.disk_state, DiskState::InSync);
+        assert_eq!(app.title(), "● a.md — Mdx");
+        // Un nuevo aviso con el mismo contenido de disco ya no molesta.
+        inspect(&mut app, &path, disk_version(&path, "disco"));
+        assert_eq!(app.doc.disk_state, DiskState::InSync);
+    }
+
+    #[test]
+    fn own_save_never_triggers_the_banner() {
+        // AC5 / INV-3: el disco coincide con `saved_hash`, aunque se haya seguido escribiendo.
+        let (mut app, _) = App::new(None);
+        let path = open_with(&mut app, "base");
+        type_char(&mut app, 'X');
+        let saved = mdx_core::document::hash_text("Xbase");
+        let info = SavedInfo {
+            path: path.clone(),
+            saved_hash: saved,
+            mtime: None,
+        };
+        let _ = app.update(Message::Saved(Ok(info)));
+        type_char(&mut app, 'Y'); // sigue editando mientras llega el evento del guardado
+        inspect(&mut app, &path, disk_version(&path, "Xbase"));
+        assert_eq!(app.doc.disk_state, DiskState::InSync);
+        assert!(app.external.is_none());
+        assert_eq!(app.content.text(), "XYbase");
+    }
+
+    #[test]
+    fn deleted_on_disk_is_marked_and_keeps_content_and_can_be_resaved() {
+        // AC4
+        let (mut app, _) = App::new(None);
+        let path = open_with(&mut app, "contenido");
+        inspect(&mut app, &path, Err(CoreError::NotFound(path.clone())));
+        assert_eq!(app.doc.disk_state, DiskState::Deleted);
+        assert_eq!(app.title(), "a.md (eliminado) — Mdx");
+        assert_eq!(app.content.text(), "contenido");
+        // Volver a guardar restituye el archivo y quita la marca.
+        let info = SavedInfo {
+            path: path.clone(),
+            saved_hash: mdx_core::document::hash_text("contenido"),
+            mtime: None,
+        };
+        let _ = app.update(Message::Saved(Ok(info)));
+        assert_eq!(app.title(), "a.md — Mdx");
+    }
+
+    #[test]
+    fn stale_inspection_results_are_ignored() {
+        let (mut app, _) = App::new(None);
+        let path = open_with(&mut app, "base");
+        let old_id = app.doc.id;
+        // Se abre otro documento mientras se leía el disco.
+        let _ = load(&mut app, "otro.md");
+        let _ = app.update(Message::DiskInspected(
+            old_id,
+            path.clone(),
+            disk_version(&path, "x"),
+        ));
+        assert_eq!(app.content.text(), "# x");
+        assert_eq!(app.doc.disk_state, DiskState::InSync);
+    }
+
+    #[test]
+    fn fs_events_for_unrelated_files_do_nothing_to_the_document() {
+        let (mut app, _) = App::new(None);
+        let _ = open_with(&mut app, "base");
+        let _ = app.update(Message::Fs(vec![FsEvent::Modified(PathBuf::from(
+            "/otro/b.md",
+        ))]));
+        assert_eq!(app.content.text(), "base");
     }
 
     #[test]

@@ -12,6 +12,7 @@ pub mod fileops;
 pub mod history;
 pub mod io;
 pub mod link;
+pub mod watcher;
 pub mod workspace;
 
 pub use document::{DiskState, Document, DocumentId, LineEnding};
