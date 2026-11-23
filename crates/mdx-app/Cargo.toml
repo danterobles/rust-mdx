@@ -1,0 +1,21 @@
+[package]
+name = "mdx-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Aplicación de escritorio Mdx"
+
+[[bin]]
+name = "mdx"
+path = "src/main.rs"
+
+[dependencies]
+mdx-core.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true

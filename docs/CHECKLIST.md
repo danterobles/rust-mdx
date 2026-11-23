@@ -30,10 +30,10 @@
 ## Fase 0 — Fundaciones → v0.1.0
 
 ### US-0.1 Workspace y CI
-- [ ] AC1 `cargo build` y `cargo test` pasan 🧪
-- [ ] AC2 CI en ubuntu/macos/windows 🧪
-- [ ] AC3 clippy sin warnings 🧪
-- [ ] AC4 `cargo deny check` configurado 🧪
+- [x] AC1 `cargo build` y `cargo test` pasan 🧪
+- [~] AC2 CI en ubuntu/macos/windows 🧪 (workflow escrito; verificación pendiente del primer push, ver progress.md)
+- [x] AC3 clippy sin warnings 🧪
+- [x] AC4 `cargo deny check` configurado 🧪
 
 ### US-0.2 Ventana base
 - [ ] AC1 Ventana "Mdx" abre 👁
