@@ -263,7 +263,7 @@ Decisiones y puntos a revisar:
 - Siguen abiertos de fases anteriores: Hito F1 y comprobaciones 👁 de NFR-2/3/4; CI remoto (AC2 de US-0.1); licencia y URL del repositorio en `TBD`.
 - Tags `v0.2.0`, `v0.3.0` y `v0.4.0`: **no creados**; requieren autorización explícita.
 
-## US-4.2 Configuración — 🟡 implementada, pendiente verificación 👁 AC3 (rama feat/us-4.2-configuracion)
+## US-4.2 Configuración — ✅ completa (rama feat/us-4.2-configuracion)
 Plan: ampliar `mdx-core::config` al esquema completo de DATA §4.1, `Config::ensure_file` + plantilla, `Ctrl/Cmd+,`, recarga al guardar, aplicar los ajustes.
 - AC1 🧪 `paths::app_files()` (directories) + `MDX_CONFIG_DIR`/`MDX_STATE_DIR`.
 - AC2 🧪 ajustes: se aplican `font_family` (si no está instalada → monoespaciada del sistema, comprobado contra el sistema de fuentes de iced), `font_size`, `line_wrap` (`Wrapping::Word`/`None`), `autosave`, `autosave_delay_ms`, filtros del explorador (si cambian y hay carpeta abierta se relee), `preview.visible` y `preview.sync_scroll`. **Tema y zoom** se leen/validan pero se aplican en US-4.1/US-4.5; **`tab_width`/`insert_spaces`** quedan reservados (iced 0.14 no deja configurarlos).
@@ -274,3 +274,4 @@ Decisiones:
 - `font_family` por defecto pasa de «JetBrains Mono» (DATA) a `monospace`: no se distribuye ninguna fuente y una fuente ausente caería en una proporcional. Actualizado DATA §4.1.
 - `FilesConfig` lleva `#[allow(clippy::struct_excessive_bools)]`: refleja el esquema fijado en DATA.
 - No hay recarga por cambios externos de `config.toml` (solo al guardarlo desde Mdx); no está en el PRD.
+- Verificación 👁 AC3 confirmada manualmente por el propietario el 2026-11-23.
