@@ -3,7 +3,9 @@
 use std::path::{Path, PathBuf};
 
 use iced::keyboard::{Key, Modifiers, key::Named};
-use iced::widget::{Column, button, checkbox, container, mouse_area, scrollable, text};
+use iced::widget::{
+    Column, Id, Row, button, checkbox, container, mouse_area, scrollable, text, text_input,
+};
 use iced::{Element, Length, Theme};
 use mdx_core::workspace::{Children, FileNode, NodeKind, TreeFilters, VisibleNode, Workspace};
 
@@ -20,7 +22,50 @@ pub struct ExplorerState {
     pub menu_open: bool,
     /// Fila con el foco del teclado (distinta del archivo abierto en el editor).
     pub selected: Option<PathBuf>,
+    /// Menú contextual abierto sobre una fila (clic derecho).
+    pub context: Option<ContextTarget>,
+    /// Entrada de nombre en línea (nuevo archivo/carpeta, renombrar).
+    pub prompt: Option<Prompt>,
 }
+
+/// Elemento sobre el que se abrió el menú contextual.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContextTarget {
+    pub path: PathBuf,
+    pub is_dir: bool,
+    /// La carpeta raíz del workspace (no se puede renombrar ni eliminar).
+    pub is_root: bool,
+}
+
+/// Acciones del menú contextual.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContextAction {
+    NewFile,
+    NewFolder,
+    Rename,
+    Delete,
+    Reveal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PromptKind {
+    NewFile,
+    NewFolder,
+    Rename,
+}
+
+/// Entrada de nombre en línea con su error de validación.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Prompt {
+    pub kind: PromptKind,
+    /// Carpeta destino (nuevo archivo/carpeta) o ruta a renombrar.
+    pub target: PathBuf,
+    pub value: String,
+    pub error: Option<String>,
+}
+
+/// Identificador del campo de nombre (para enfocarlo al abrirlo).
+pub const PROMPT_ID: &str = "explorer-prompt";
 
 /// Teclas de navegación del árbol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -151,7 +196,21 @@ pub fn view<'a>(state: &'a ExplorerState, active: Option<&'a Path>) -> Element<'
                 active,
             };
             let mut column = Column::new().spacing(2);
-            column = column.push(text(&ws.tree.name).size(16));
+            let root_target = ContextTarget {
+                path: ws.root.clone(),
+                is_dir: true,
+                is_root: true,
+            };
+            column = column.push(
+                mouse_area(text(&ws.tree.name).size(16))
+                    .on_right_press(Message::OpenContext(root_target)),
+            );
+            if let Some(target) = &state.context {
+                column = column.push(context_menu(target));
+            }
+            if let Some(prompt) = &state.prompt {
+                column = column.push(prompt_view(prompt));
+            }
             if state.menu_open {
                 column = column.push(filter_menu(state.filters));
             }
@@ -166,6 +225,71 @@ pub fn view<'a>(state: &'a ExplorerState, active: Option<&'a Path>) -> Element<'
     };
     mouse_area(container(body).width(Length::Fill).height(Length::Fill))
         .on_right_press(Message::ToggleExplorerMenu)
+        .into()
+}
+
+fn context_menu(target: &ContextTarget) -> Element<'_, Message> {
+    let item = |label: &'static str, action: ContextAction| {
+        button(text(label))
+            .padding([2, 6])
+            .style(button::text)
+            .on_press(Message::ContextAction(action))
+    };
+    let name = target.path.file_name().map_or_else(
+        || target.path.display().to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    let mut menu = Column::new().spacing(2).push(text(name).size(13));
+    menu = menu
+        .push(item(strings::CTX_NEW_FILE, ContextAction::NewFile))
+        .push(item(strings::CTX_NEW_FOLDER, ContextAction::NewFolder));
+    if !target.is_root {
+        menu = menu
+            .push(item(strings::CTX_RENAME, ContextAction::Rename))
+            .push(item(strings::CTX_DELETE, ContextAction::Delete));
+    }
+    menu = menu
+        .push(item(strings::CTX_REVEAL, ContextAction::Reveal))
+        .push(
+            button(text(strings::CTX_CLOSE).size(12))
+                .padding([2, 6])
+                .style(button::secondary)
+                .on_press(Message::CloseContext),
+        );
+    container(menu)
+        .padding(8)
+        .style(container::bordered_box)
+        .into()
+}
+
+fn prompt_view(prompt: &Prompt) -> Element<'_, Message> {
+    let label = match prompt.kind {
+        PromptKind::NewFile => strings::PROMPT_NEW_FILE,
+        PromptKind::NewFolder => strings::PROMPT_NEW_FOLDER,
+        PromptKind::Rename => strings::PROMPT_RENAME,
+    };
+    let mut column = Column::new().spacing(4).push(text(label).size(13)).push(
+        text_input("", &prompt.value)
+            .id(Id::new(PROMPT_ID))
+            .on_input(Message::PromptChanged)
+            .on_submit(Message::PromptSubmit),
+    );
+    if let Some(err) = &prompt.error {
+        column = column.push(text(err).size(13).style(text::danger));
+    }
+    column = column.push(
+        Row::new()
+            .spacing(6)
+            .push(button(text(strings::PROMPT_ACCEPT)).on_press(Message::PromptSubmit))
+            .push(
+                button(text(strings::PROMPT_CANCEL))
+                    .style(button::secondary)
+                    .on_press(Message::PromptCancel),
+            ),
+    );
+    container(column)
+        .padding(8)
+        .style(container::bordered_box)
         .into()
 }
 
@@ -229,7 +353,12 @@ fn node_rows<'a>(
             // porque el botón captura el clic y `mouse_area` no recibiría el doble clic.
             let row = mouse_area(highlighted(text(&node.name).into(), mark))
                 .on_press(Message::FileClicked(node.path.clone()))
-                .on_double_click(Message::FilePinned(node.path.clone()));
+                .on_double_click(Message::FilePinned(node.path.clone()))
+                .on_right_press(Message::OpenContext(ContextTarget {
+                    path: node.path.clone(),
+                    is_dir: false,
+                    is_root: false,
+                }));
             rows.push(indented(row.into(), depth))
         }
         NodeKind::Dir { children, expanded } => {
@@ -238,7 +367,14 @@ fn node_rows<'a>(
                 .padding(0)
                 .style(button::text)
                 .on_press(Message::ToggleDir(node.path.clone()));
-            let rows = rows.push(indented(highlighted(label.into(), mark), depth));
+            let row = mouse_area(highlighted(label.into(), mark)).on_right_press(
+                Message::OpenContext(ContextTarget {
+                    path: node.path.clone(),
+                    is_dir: true,
+                    is_root: false,
+                }),
+            );
+            let rows = rows.push(indented(row.into(), depth));
             if *expanded {
                 children_rows(rows, children, depth + 1, ctx)
             } else {

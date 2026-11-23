@@ -66,6 +66,7 @@ flowchart LR
 | `workspace` | `Workspace`, `FileNode`, `load_children(dir, filters)`, operaciones (crear, renombrar, papelera) | Usa `ignore::WalkBuilder` con `max_depth(1)` para carga perezosa |
 | `watcher` | `watch(root) -> impl Stream<Item = FsEvent>` | `notify-debouncer-full`, 200 ms; filtra por `TreeFilters` |
 | `history` | `History`, `Patch`, `offset_to_pos` | Deshacer/rehacer por diferencias (ADR 0005); sin dependencias de UI |
+| `fileops` | `validate_name`, `create_file`, `create_dir`, `rename`, `move_to_trash`, `reveal`, `rebase_path` | Operaciones sobre archivos del usuario; eliminar = papelera (`trash`), nunca `remove_*` |
 | `link` | `classify(url, base_dir) -> LinkTarget` | Enlaces de la preview: externo, Markdown local o no soportado |
 | `outline` | `extract(text) -> Outline` | `pulldown-cmark` con `into_offset_iter` para obtener la línea |
 | `search` | `search_text(text, q)`, `search_workspace(root, q, cancel) -> Stream<SearchMatch>` | `regex`; cancelación con `CancellationToken` o `AtomicBool` |

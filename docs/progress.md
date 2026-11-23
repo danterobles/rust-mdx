@@ -136,3 +136,18 @@ Decisiones:
 - Pendiente de verificar a mano: que tras hacer clic en el explorador el editor pierda el foco y las flechas muevan el árbol.
 - `Tabs::{tabs, active, is_pinned}` llevan `#[allow(dead_code)]` hasta que la use US-3.1.
 - Verificación 👁 AC1–AC3 confirmada manualmente por el propietario el 2026-11-23.
+
+## US-2.3 Operaciones de archivo — 🟡 implementada, pendiente verificación 👁 AC1 y AC2 (rama feat/us-2.3-operaciones)
+Plan: `mdx-core::fileops` (validación, crear, renombrar, papelera, revelar, `rebase_path`), `mdx-app` (`explorer.rs` menú contextual y entrada de nombre en línea; `app.rs` `update_explorer`, `OpOutcome`).
+- AC1 👁 clic derecho en una fila (archivo, carpeta) o en el nombre de la carpeta raíz abre el menú: Nuevo archivo, Nueva carpeta, Renombrar, Eliminar, Revelar en el sistema (la raíz no ofrece renombrar/eliminar). Clic derecho en espacio vacío abre el menú de filtros de US-2.1.
+- AC2 🧪/👁 `fileops::move_to_trash` delega en `trash::delete`; no hay `remove_file`/`remove_dir*` sobre archivos del usuario (grep limpio salvo el temporal propio del guardado atómico). La prueba unitaria usa un «trasher» inyectado para no ensuciar la papelera real del desarrollador; el envío real a la papelera se verifica a mano. Confirmación con diálogo nativo «Mover a la papelera / Cancelar».
+- AC3 🧪 el documento abierto sigue la ruta tras renombrar él o una carpeta padre (conserva contenido y estado «sin guardar»).
+- AC4 🧪 validación sin tocar disco (vacío, `.`/`..`, `/ \ : * ? " < > |`, controles, punto o espacio final, nombres reservados de Windows, > 255 bytes) y duplicados rechazados con `create_new`/comprobación previa; el error se muestra en línea bajo el campo.
+Decisiones:
+- «Nuevo archivo» sin extensión añade `.md`.
+- Tras crear/renombrar/eliminar se recarga el directorio padre (el watcher de US-2.4 lo hará solo más adelante); crear expande la carpeta y selecciona el elemento. El archivo nuevo no se abre automáticamente.
+- Eliminar el archivo abierto conserva su contenido en el editor con `DiskState::Deleted`; la marca «(eliminado)» visible llega en US-2.4 AC4.
+- Renombrar un archivo con cambios sin guardar es seguro: no se toca el contenido, solo la ruta.
+- Renombrar solo mayúsculas/minúsculas se permite incluso en sistemas de archivos que no las distinguen.
+- «Revelar»: `open -R` (macOS), `explorer /select,` (Windows), `xdg-open <carpeta>` (Linux).
+- `update` se dividió: `update_explorer` agrupa los mensajes del explorador (límite de líneas de clippy).

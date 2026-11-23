@@ -9,6 +9,7 @@ use iced::{
     window,
 };
 use mdx_core::document::count_words;
+use mdx_core::fileops;
 use mdx_core::history::History;
 use mdx_core::io::SavedInfo;
 use mdx_core::link::{self, LinkTarget};
@@ -16,7 +17,10 @@ use mdx_core::workspace::{self, FileNode, TreeFilters, Workspace};
 use mdx_core::{CoreError, Document};
 
 use crate::editor;
-use crate::explorer::{self, ExplorerKey, ExplorerState, Nav};
+use crate::explorer::{
+    self, ContextAction, ContextTarget, ExplorerKey, ExplorerState, Nav, PROMPT_ID, Prompt,
+    PromptKind,
+};
 use crate::layout::{PaneKind, initial_panes, panes_without_preview};
 use crate::shortcuts::{self, ShortcutAction};
 use crate::state::tabs::Tabs;
@@ -66,6 +70,15 @@ pub enum PendingAction {
     OpenPath(PathBuf),
 }
 
+/// Resultado de una operación de archivos.
+#[derive(Debug, Clone)]
+pub enum OpOutcome {
+    Created(PathBuf),
+    Renamed { from: PathBuf, to: PathBuf },
+    Trashed(PathBuf),
+    Revealed,
+}
+
 /// Filtros del explorador que el usuario puede alternar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilterKind {
@@ -107,6 +120,14 @@ pub enum Message {
     FileClicked(PathBuf),
     FilePinned(PathBuf),
     ExplorerKey(ExplorerKey),
+    OpenContext(ContextTarget),
+    CloseContext,
+    ContextAction(ContextAction),
+    PromptChanged(String),
+    PromptSubmit,
+    PromptCancel,
+    DeleteAnswered(PathBuf, bool),
+    OpDone(Result<OpOutcome, CoreError>),
     ToggleFilter(FilterKind),
     PreviewParsed(u64, Vec<markdown::Item>),
     LinkClicked(String),
@@ -144,6 +165,8 @@ impl App {
                     filters,
                     menu_open: false,
                     selected: None,
+                    context: None,
+                    prompt: None,
                 },
                 tabs,
                 pin_on_load,
@@ -253,6 +276,44 @@ impl App {
                 }
                 Task::none()
             }
+            m @ (Message::FolderPicked(Some(_))
+            | Message::WorkspaceOpened(_)
+            | Message::ToggleDir(_)
+            | Message::DirLoaded(..)
+            | Message::FileClicked(_)
+            | Message::FilePinned(_)
+            | Message::ExplorerKey(_)
+            | Message::OpenContext(_)
+            | Message::CloseContext
+            | Message::ContextAction(_)
+            | Message::PromptChanged(_)
+            | Message::PromptSubmit
+            | Message::PromptCancel
+            | Message::DeleteAnswered(..)
+            | Message::OpDone(_)
+            | Message::ToggleExplorerMenu
+            | Message::ToggleFilter(_)) => self.update_explorer(m),
+            Message::LinkClicked(url) => self.handle_link(&url),
+            Message::LinkOpened(result) => {
+                if let Err(err) = result {
+                    self.set_status(err, true);
+                }
+                Task::none()
+            }
+            Message::GuardAnswered(action, choice) => match choice {
+                GuardChoice::Save => {
+                    self.after_save = Some(action);
+                    self.save()
+                }
+                GuardChoice::Discard => self.run(action),
+                GuardChoice::Cancel => Task::none(),
+            },
+        }
+    }
+
+    /// Mensajes del explorador (árbol, menú contextual, operaciones de archivo).
+    fn update_explorer(&mut self, message: Message) -> Task<Message> {
+        match message {
             Message::FolderPicked(Some(path)) => Task::perform(
                 workspace::open_async(path, self.explorer.filters),
                 Message::WorkspaceOpened,
@@ -279,26 +340,43 @@ impl App {
             Message::FileClicked(path) => self.open_from_explorer(path, false),
             Message::FilePinned(path) => self.open_from_explorer(path, true),
             Message::ExplorerKey(key) => self.explorer_key(key),
+            Message::OpenContext(target) => {
+                self.explorer.context = Some(target);
+                self.explorer.prompt = None;
+                Task::none()
+            }
+            Message::CloseContext => {
+                self.explorer.context = None;
+                Task::none()
+            }
+            Message::ContextAction(action) => self.context_action(action),
+            Message::PromptChanged(value) => {
+                if let Some(p) = &mut self.explorer.prompt {
+                    p.value = value;
+                    p.error = None;
+                }
+                Task::none()
+            }
+            Message::PromptSubmit => self.submit_prompt(),
+            Message::PromptCancel => {
+                self.explorer.prompt = None;
+                Task::none()
+            }
+            Message::DeleteAnswered(path, true) => Task::perform(
+                async move {
+                    fileops::move_to_trash_async(path.clone())
+                        .await
+                        .map(|()| OpOutcome::Trashed(path))
+                },
+                Message::OpDone,
+            ),
+            Message::OpDone(result) => self.handle_op_done(result),
             Message::ToggleExplorerMenu => {
                 self.explorer.menu_open = !self.explorer.menu_open;
                 Task::none()
             }
             Message::ToggleFilter(kind) => self.toggle_filter(kind),
-            Message::LinkClicked(url) => self.handle_link(&url),
-            Message::LinkOpened(result) => {
-                if let Err(err) = result {
-                    self.set_status(err, true);
-                }
-                Task::none()
-            }
-            Message::GuardAnswered(action, choice) => match choice {
-                GuardChoice::Save => {
-                    self.after_save = Some(action);
-                    self.save()
-                }
-                GuardChoice::Discard => self.run(action),
-                GuardChoice::Cancel => Task::none(),
-            },
+            _ => Task::none(),
         }
     }
 
@@ -425,6 +503,184 @@ impl App {
                     .unwrap_or_default()
             },
             move |items| Message::PreviewParsed(generation, items),
+        )
+    }
+
+    fn context_action(&mut self, action: ContextAction) -> Task<Message> {
+        let Some(target) = self.explorer.context.take() else {
+            return Task::none();
+        };
+        let new_prompt = |kind, dir: PathBuf, value: String| Prompt {
+            kind,
+            target: dir,
+            value,
+            error: None,
+        };
+        let focus = || iced::widget::operation::focus(iced::widget::Id::new(PROMPT_ID));
+        match action {
+            ContextAction::NewFile | ContextAction::NewFolder => {
+                let dir = if target.is_dir {
+                    target.path
+                } else {
+                    target
+                        .path
+                        .parent()
+                        .map(Path::to_path_buf)
+                        .unwrap_or(target.path)
+                };
+                let kind = if action == ContextAction::NewFile {
+                    PromptKind::NewFile
+                } else {
+                    PromptKind::NewFolder
+                };
+                self.explorer.prompt = Some(new_prompt(kind, dir, String::new()));
+                focus()
+            }
+            ContextAction::Rename => {
+                let name = target
+                    .path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                self.explorer.prompt = Some(new_prompt(PromptKind::Rename, target.path, name));
+                focus()
+            }
+            ContextAction::Delete => {
+                let name = target
+                    .path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let path = target.path;
+                Task::perform(ask_delete(name), move |yes| {
+                    Message::DeleteAnswered(path.clone(), yes)
+                })
+            }
+            ContextAction::Reveal => Task::perform(
+                async move {
+                    fileops::reveal_async(target.path)
+                        .await
+                        .map(|()| OpOutcome::Revealed)
+                },
+                Message::OpDone,
+            ),
+        }
+    }
+
+    fn submit_prompt(&mut self) -> Task<Message> {
+        let Some(prompt) = &mut self.explorer.prompt else {
+            return Task::none();
+        };
+        // Validación en línea, sin tocar el disco (AC4).
+        if let Err(err) = fileops::validate_name(&prompt.value) {
+            prompt.error = Some(err.to_string());
+            return Task::none();
+        }
+        let (target, value) = (prompt.target.clone(), prompt.value.clone());
+        match prompt.kind {
+            PromptKind::NewFile => Task::perform(
+                async move {
+                    fileops::create_file_async(target, value)
+                        .await
+                        .map(OpOutcome::Created)
+                },
+                Message::OpDone,
+            ),
+            PromptKind::NewFolder => Task::perform(
+                async move {
+                    fileops::create_dir_async(target, value)
+                        .await
+                        .map(OpOutcome::Created)
+                },
+                Message::OpDone,
+            ),
+            PromptKind::Rename => Task::perform(
+                async move {
+                    fileops::rename_async(target.clone(), value)
+                        .await
+                        .map(|to| OpOutcome::Renamed { from: target, to })
+                },
+                Message::OpDone,
+            ),
+        }
+    }
+
+    fn handle_op_done(&mut self, result: Result<OpOutcome, CoreError>) -> Task<Message> {
+        match result {
+            Ok(OpOutcome::Created(path)) => {
+                self.explorer.prompt = None;
+                self.explorer.selected = Some(path.clone());
+                let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+                self.set_status(
+                    format!("{}: {}", strings::STATUS_CREATED, name.unwrap_or_default()),
+                    false,
+                );
+                self.reload_parent(&path, true)
+            }
+            Ok(OpOutcome::Renamed { from, to }) => {
+                self.explorer.prompt = None;
+                // AC3: el documento abierto (o uno dentro de la carpeta renombrada) sigue su ruta.
+                if let Some(new_path) = self
+                    .doc
+                    .path
+                    .as_deref()
+                    .and_then(|p| fileops::rebase_path(p, &from, &to))
+                {
+                    self.doc.path = Some(new_path);
+                }
+                self.explorer.selected = Some(to.clone());
+                let name = to.file_name().map(|n| n.to_string_lossy().into_owned());
+                self.set_status(
+                    format!("{}: {}", strings::STATUS_RENAMED, name.unwrap_or_default()),
+                    false,
+                );
+                self.reload_parent(&from, false)
+            }
+            Ok(OpOutcome::Trashed(path)) => {
+                if self
+                    .doc
+                    .path
+                    .as_deref()
+                    .is_some_and(|p| p.starts_with(&path))
+                {
+                    // El contenido se conserva en el editor para poder volver a guardarlo.
+                    self.doc.disk_state = mdx_core::DiskState::Deleted;
+                }
+                if self.explorer.selected.as_deref() == Some(path.as_path()) {
+                    self.explorer.selected = None;
+                }
+                let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+                self.set_status(
+                    format!("{}: {}", strings::STATUS_TRASHED, name.unwrap_or_default()),
+                    false,
+                );
+                self.reload_parent(&path, false)
+            }
+            Ok(OpOutcome::Revealed) => Task::none(),
+            Err(err) => {
+                // Con la entrada de nombre abierta el error se muestra en línea (AC4).
+                if let Some(prompt) = &mut self.explorer.prompt {
+                    prompt.error = Some(err.to_string());
+                } else {
+                    self.set_status(err.to_string(), true);
+                }
+                Task::none()
+            }
+        }
+    }
+
+    /// Recarga los hijos del directorio que contiene `path` (y lo expande si `expand`).
+    fn reload_parent(&mut self, path: &Path, expand: bool) -> Task<Message> {
+        let filters = self.explorer.filters;
+        let Some(parent) = path.parent().map(Path::to_path_buf) else {
+            return Task::none();
+        };
+        if expand && let Some(ws) = &mut self.explorer.workspace {
+            let _ = ws.begin_expand(&parent);
+        }
+        Task::perform(
+            workspace::load_children_async(parent.clone(), filters),
+            move |result| Message::DirLoaded(parent.clone(), result),
         )
     }
 
@@ -683,6 +939,24 @@ impl App {
         .style(container::bordered_box);
 
         Column::new().push(grid).push(status_bar).into()
+    }
+}
+
+async fn ask_delete(name: String) -> bool {
+    let result = rfd::AsyncMessageDialog::new()
+        .set_level(rfd::MessageLevel::Warning)
+        .set_title(strings::DELETE_TITLE)
+        .set_description(strings::DELETE_BODY.replace("{name}", &name))
+        .set_buttons(rfd::MessageButtons::OkCancelCustom(
+            strings::DELETE_CONFIRM.to_owned(),
+            strings::PROMPT_CANCEL.to_owned(),
+        ))
+        .show()
+        .await;
+    match result {
+        rfd::MessageDialogResult::Ok => true,
+        rfd::MessageDialogResult::Custom(label) => label == strings::DELETE_CONFIRM,
+        _ => false,
     }
 }
 
@@ -1149,6 +1423,153 @@ mod tests {
         assert!(expanded(&app));
         let _ = app.update(Message::ExplorerKey(ExplorerKey::Left));
         assert!(!expanded(&app));
+    }
+
+    fn open_prompt(app: &mut App, kind: PromptKind, target: &str, value: &str) {
+        app.explorer.prompt = Some(Prompt {
+            kind,
+            target: PathBuf::from(target),
+            value: value.to_owned(),
+            error: None,
+        });
+    }
+
+    #[test]
+    fn context_menu_opens_for_the_clicked_row_and_closes() {
+        // AC1
+        let (mut app, _) = App::new(None);
+        let target = ContextTarget {
+            path: PathBuf::from("/p/a.md"),
+            is_dir: false,
+            is_root: false,
+        };
+        let _ = app.update(Message::OpenContext(target.clone()));
+        assert_eq!(app.explorer.context, Some(target));
+        let _ = app.update(Message::CloseContext);
+        assert!(app.explorer.context.is_none());
+    }
+
+    #[test]
+    fn context_actions_open_the_inline_name_prompt() {
+        // AC1: Nuevo archivo sobre un archivo crea en su carpeta; Renombrar precarga el nombre.
+        let (mut app, _) = App::new(None);
+        let target = ContextTarget {
+            path: PathBuf::from("/p/sub/a.md"),
+            is_dir: false,
+            is_root: false,
+        };
+        let _ = app.update(Message::OpenContext(target.clone()));
+        let _ = app.update(Message::ContextAction(ContextAction::NewFile));
+        let prompt = app.explorer.prompt.clone().unwrap();
+        assert_eq!(
+            (prompt.kind, prompt.target.as_path()),
+            (PromptKind::NewFile, Path::new("/p/sub"))
+        );
+
+        let _ = app.update(Message::OpenContext(target));
+        let _ = app.update(Message::ContextAction(ContextAction::Rename));
+        let prompt = app.explorer.prompt.clone().unwrap();
+        assert_eq!(
+            (prompt.kind, prompt.value.as_str()),
+            (PromptKind::Rename, "a.md")
+        );
+        assert!(
+            app.explorer.context.is_none(),
+            "el menú se cierra al elegir"
+        );
+    }
+
+    #[test]
+    fn invalid_name_shows_inline_error_without_running_any_operation() {
+        // AC4
+        let (mut app, _) = App::new(None);
+        open_prompt(&mut app, PromptKind::NewFile, "/p", "a/b");
+        let _ = app.update(Message::PromptSubmit);
+        let prompt = app.explorer.prompt.clone().unwrap();
+        assert!(
+            prompt
+                .error
+                .as_deref()
+                .is_some_and(|e| e.contains("no está permitido"))
+        );
+        // Escribir de nuevo limpia el error.
+        let _ = app.update(Message::PromptChanged("ok".into()));
+        assert!(app.explorer.prompt.as_ref().unwrap().error.is_none());
+    }
+
+    #[test]
+    fn duplicate_name_error_from_disk_is_shown_inline_and_keeps_the_prompt() {
+        // AC4
+        let (mut app, _) = App::new(None);
+        open_prompt(&mut app, PromptKind::Rename, "/p/a.md", "b.md");
+        let _ = app.update(Message::OpDone(Err(CoreError::AlreadyExists(
+            PathBuf::from("/p/b.md"),
+        ))));
+        let prompt = app.explorer.prompt.clone().unwrap();
+        assert!(
+            prompt
+                .error
+                .as_deref()
+                .is_some_and(|e| e.contains("Ya existe"))
+        );
+        assert!(
+            app.status.is_none(),
+            "no es un error global de la barra de estado"
+        );
+    }
+
+    #[test]
+    fn renaming_the_open_file_updates_its_path() {
+        // AC3
+        let (mut app, _) = App::new(None);
+        let from = load(&mut app, "a.md");
+        type_char(&mut app, 'x');
+        open_prompt(&mut app, PromptKind::Rename, "/proyecto/a.md", "b.md");
+        let to = PathBuf::from("/proyecto/b.md");
+        let _ = app.update(Message::OpDone(Ok(OpOutcome::Renamed {
+            from,
+            to: to.clone(),
+        })));
+        assert_eq!(app.doc.path.as_deref(), Some(to.as_path()));
+        assert!(app.explorer.prompt.is_none());
+        assert_eq!(
+            app.title(),
+            "● b.md — Mdx",
+            "conserva el estado sin guardar"
+        );
+    }
+
+    #[test]
+    fn renaming_a_parent_folder_rebases_the_open_file() {
+        // AC3
+        let (mut app, _) = App::new(None);
+        load(&mut app, "dir/a.md");
+        let _ = app.update(Message::OpDone(Ok(OpOutcome::Renamed {
+            from: PathBuf::from("/proyecto/dir"),
+            to: PathBuf::from("/proyecto/nuevo"),
+        })));
+        assert_eq!(
+            app.doc.path.as_deref(),
+            Some(Path::new("/proyecto/nuevo/a.md"))
+        );
+    }
+
+    #[test]
+    fn trashing_the_open_file_keeps_its_content_marked_deleted() {
+        // AC2
+        let (mut app, _) = App::new(None);
+        let path = load(&mut app, "a.md");
+        let _ = app.update(Message::OpDone(Ok(OpOutcome::Trashed(path))));
+        assert_eq!(app.doc.disk_state, mdx_core::DiskState::Deleted);
+        assert_eq!(app.content.text(), "# x");
+    }
+
+    #[test]
+    fn declining_the_trash_confirmation_does_nothing() {
+        // AC2
+        let (mut app, _) = App::new(None);
+        let _ = app.update(Message::DeleteAnswered(PathBuf::from("/p/a.md"), false));
+        assert!(app.status.is_none());
     }
 
     #[test]

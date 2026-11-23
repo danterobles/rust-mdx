@@ -11,6 +11,7 @@ description = "Lógica pura de Mdx (sin UI)"
 [dependencies]
 ignore.workspace = true
 thiserror.workspace = true
+trash.workspace = true
 tokio.workspace = true
 xxhash-rust.workspace = true
 
