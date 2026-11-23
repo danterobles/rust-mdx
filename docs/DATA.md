@@ -206,7 +206,7 @@ Todos los archivos de Mdx se escriben con `io::write_atomic`.
 
 Las variables de entorno `MDX_CONFIG_DIR` y `MDX_STATE_DIR` sustituyen los directorios anteriores (pruebas, instalaciones portables).
 
-> **Estado de implementación:** en US-3.5 `config.toml` solo se interpreta la sección `[files]` (`autosave`, `autosave_delay_ms`); el resto del esquema llega con US-4.2. Mdx **nunca escribe** `config.toml`.
+> **Estado de implementación (US-4.2):** se leen y validan todos los ajustes. Se aplican: `editor.font_family`, `editor.font_size`, `editor.line_wrap`, `preview.*` y `files.*`. `editor.tab_width` e `insert_spaces` quedan reservados (iced 0.14 no permite configurarlos) y `appearance.theme`/`zoom` se aplican en US-4.1/US-4.5. Mdx **nunca modifica** `config.toml` salvo para crear la plantilla (`Config::ensure_file`) cuando no existe y el usuario pulsa `Ctrl/Cmd+,`.
 
 ### 4.1 `config.toml` (editable por el usuario)
 
@@ -214,7 +214,7 @@ Las variables de entorno `MDX_CONFIG_DIR` y `MDX_STATE_DIR` sustituyen los direc
 schema_version = 1
 
 [editor]
-font_family = "JetBrains Mono"   # si no existe, fallback a monoespaciada del sistema
+font_family = "monospace"        # nombre de una fuente instalada; si no existe, monoespaciada del sistema
 font_size = 14                   # 8..=48
 line_wrap = true
 tab_width = 4                    # 2..=8

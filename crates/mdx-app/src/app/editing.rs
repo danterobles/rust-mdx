@@ -214,6 +214,7 @@ impl App {
         result: Result<SavedInfo, CoreError>,
     ) -> Task<Message> {
         self.autosave_inflight.remove(&id);
+        let saved_path = result.as_ref().ok().map(|info| info.path.clone());
         let saved = self
             .with_doc(id, |app| app.apply_saved(result))
             .unwrap_or(false);
@@ -221,9 +222,11 @@ impl App {
             self.after_save = None;
             return Task::none();
         }
+        // Guardar `config.toml` aplica la configuración al instante.
+        let reload = saved_path.map_or_else(Task::none, |p| self.reload_config_if_saved(&p));
         match self.after_save.take() {
-            Some(action) => self.request(action),
-            None => Task::none(),
+            Some(action) => Task::batch([reload, self.request(action)]),
+            None => reload,
         }
     }
 

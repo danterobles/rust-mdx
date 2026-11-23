@@ -15,6 +15,8 @@ pub enum ShortcutAction {
     Redo,
     TogglePreview,
     CloseTab,
+    /// Abrir `config.toml` en una pestaña.
+    OpenConfig,
     /// Buscar en el documento.
     Find,
     /// Buscar y reemplazar en el documento.
@@ -101,6 +103,7 @@ pub fn map(key: &Key, physical: Physical, modifiers: Modifiers) -> Option<Shortc
         ('s', false) => Some(ShortcutAction::Save),
         ('s', true) => Some(ShortcutAction::SaveAs),
         ('w', false) => Some(ShortcutAction::CloseTab),
+        (',', false) => Some(ShortcutAction::OpenConfig),
         ('f', false) => Some(ShortcutAction::Find),
         ('f', true) => Some(ShortcutAction::FindInWorkspace),
         ('h', false) if !cfg!(target_os = "macos") => Some(ShortcutAction::Replace),
@@ -196,6 +199,18 @@ mod tests {
             map(&tab, Physical::Code(Code::Tab), Modifiers::empty()),
             None
         );
+    }
+
+    #[test]
+    fn maps_the_config_shortcut() {
+        // AC3
+        let cmd = Modifiers::COMMAND;
+        assert_eq!(
+            press(",", Code::Comma, cmd),
+            Some(ShortcutAction::OpenConfig)
+        );
+        assert_eq!(press(",", Code::Comma, Modifiers::empty()), None);
+        assert_eq!(press(",", Code::Comma, cmd | Modifiers::SHIFT), None);
     }
 
     #[test]

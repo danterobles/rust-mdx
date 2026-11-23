@@ -10,6 +10,12 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 
 ## [Unreleased]
 
+### Added
+- Configuración en `config.toml`: fuente y tamaño del editor, ajuste de línea, autoguardado, filtros del explorador (ocultos, `.gitignore`, solo Markdown), vista previa visible/sincronizada, tema y zoom (estos dos, reservados). `Ctrl/Cmd+,` abre el archivo en una pestaña (creando una plantilla comentada la primera vez) y los cambios se aplican al guardarlo. Un archivo con errores se ignora con un aviso sin modificarlo; los valores fuera de rango se acotan [US-4.2]
+
+### Changed
+- El esquema de `config.toml` pasa a incluir las secciones `[editor]`, `[preview]`, `[files]` y `[appearance]`; el campo `font_family` usa por defecto la fuente monoespaciada del sistema [US-4.2]
+
 ## [0.4.0] - 2026-11-23
 
 ### Added

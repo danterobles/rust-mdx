@@ -82,6 +82,58 @@ pub fn top_visible_line(content: &mut Content) -> (usize, f32) {
     (top.line, fraction)
 }
 
+/// Fuente del editor según `[editor] font_family`: `monospace` (o una fuente que no está
+/// instalada) usa la monoespaciada del sistema.
+#[must_use]
+pub fn resolve_font(family: &str) -> iced::Font {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+
+    // `Font` pide un nombre `'static`: se conserva uno por familia distinta (pocas, en la vida
+    // de la aplicación) en vez de filtrar una cadena en cada recarga de la configuración.
+    static NAMES: OnceLock<Mutex<HashMap<String, &'static str>>> = OnceLock::new();
+
+    let family = family.trim();
+    if family.is_empty() || family.eq_ignore_ascii_case("monospace") || !font_is_installed(family) {
+        return iced::Font::MONOSPACE;
+    }
+    let mut names = NAMES
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let name = *names
+        .entry(family.to_owned())
+        .or_insert_with(|| Box::leak(family.to_owned().into_boxed_str()));
+    iced::Font::with_name(name)
+}
+
+fn font_is_installed(family: &str) -> bool {
+    let Ok(mut system) = iced::advanced::graphics::text::font_system().write() else {
+        return false;
+    };
+    system.raw().db().faces().any(|face| {
+        face.families
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case(family))
+    })
+}
+
+/// Estrategia de ajuste de línea del editor según `[editor] line_wrap`.
+#[must_use]
+pub fn wrapping(line_wrap: bool) -> iced::widget::text::Wrapping {
+    if line_wrap {
+        iced::widget::text::Wrapping::Word
+    } else {
+        iced::widget::text::Wrapping::None
+    }
+}
+
+/// Tamaño de fuente del editor en píxeles (la configuración ya lo acotó a 8..=48).
+#[must_use]
+pub fn font_px(size: u32) -> f32 {
+    f32::from(u16::try_from(size).unwrap_or(14))
+}
+
 /// `true` si la acción continúa una ráfaga de tecleo/borrado (se fusiona en el historial).
 #[must_use]
 pub fn is_mergeable(action: &text_editor::Action) -> bool {
@@ -94,6 +146,28 @@ pub fn is_mergeable(action: &text_editor::Action) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unknown_or_generic_font_families_fall_back_to_the_system_monospace() {
+        assert_eq!(resolve_font("monospace"), iced::Font::MONOSPACE);
+        assert_eq!(resolve_font("  MONOSPACE "), iced::Font::MONOSPACE);
+        assert_eq!(resolve_font(""), iced::Font::MONOSPACE);
+        assert_eq!(
+            resolve_font("Fuente Que No Existe 12345"),
+            iced::Font::MONOSPACE
+        );
+    }
+
+    #[test]
+    fn wrap_and_size_mappings() {
+        assert_eq!(wrapping(true), iced::widget::text::Wrapping::Word);
+        assert_eq!(wrapping(false), iced::widget::text::Wrapping::None);
+        assert!((font_px(18) - 18.0).abs() < f32::EPSILON);
+        assert!(
+            (font_px(u32::MAX) - 14.0).abs() < f32::EPSILON,
+            "valor absurdo → 14"
+        );
+    }
 
     #[test]
     fn probe_reads_the_first_visible_line_without_moving_the_cursor() {

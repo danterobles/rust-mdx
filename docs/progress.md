@@ -262,3 +262,16 @@ Decisiones y puntos a revisar:
 - Hito F3 en `[~]`: verificadas las cinco historias por separado; falta un recorrido único de sesión.
 - Siguen abiertos de fases anteriores: Hito F1 y comprobaciones 👁 de NFR-2/3/4; CI remoto (AC2 de US-0.1); licencia y URL del repositorio en `TBD`.
 - Tags `v0.2.0`, `v0.3.0` y `v0.4.0`: **no creados**; requieren autorización explícita.
+
+## US-4.2 Configuración — ✅ completa (rama feat/us-4.2-configuracion)
+Plan: ampliar `mdx-core::config` al esquema completo de DATA §4.1, `Config::ensure_file` + plantilla, `Ctrl/Cmd+,`, recarga al guardar, aplicar los ajustes.
+- AC1 🧪 `paths::app_files()` (directories) + `MDX_CONFIG_DIR`/`MDX_STATE_DIR`.
+- AC2 🧪 ajustes: se aplican `font_family` (si no está instalada → monoespaciada del sistema, comprobado contra el sistema de fuentes de iced), `font_size`, `line_wrap` (`Wrapping::Word`/`None`), `autosave`, `autosave_delay_ms`, filtros del explorador (si cambian y hay carpeta abierta se relee), `preview.visible` y `preview.sync_scroll`. **Tema y zoom** se leen/validan pero se aplican en US-4.1/US-4.5; **`tab_width`/`insert_spaces`** quedan reservados (iced 0.14 no deja configurarlos).
+- AC3 `Ctrl/Cmd+,` crea la plantilla comentada si el archivo no existe (nunca sobrescribe) y lo abre fijado; al **guardar ese archivo** (a mano o por autoguardado) se recarga y se aplica, con «Configuración aplicada» o el aviso correspondiente. Un cambio de `preview.visible`/`sync_scroll` al recargar sustituye lo que el usuario hubiera alternado a mano.
+- AC4 🧪 INV-6 (`invalid_not_overwritten`): TOML inválido, tipos erróneos, tema desconocido o esquema más nuevo → valores por defecto + aviso, sin tocar el archivo; fuera de rango → se acota (aviso por cada campo). Claves desconocidas: se ignoran y solo se registran con `tracing::warn!`.
+Decisiones:
+- La configuración se lee antes que la sesión (`Task::chain`) para que los filtros del explorador ya estén aplicados al restaurar la carpeta.
+- `font_family` por defecto pasa de «JetBrains Mono» (DATA) a `monospace`: no se distribuye ninguna fuente y una fuente ausente caería en una proporcional. Actualizado DATA §4.1.
+- `FilesConfig` lleva `#[allow(clippy::struct_excessive_bools)]`: refleja el esquema fijado en DATA.
+- No hay recarga por cambios externos de `config.toml` (solo al guardarlo desde Mdx); no está en el PRD.
+- Verificación 👁 AC3 confirmada manualmente por el propietario el 2026-11-23.
