@@ -175,3 +175,19 @@ Decisiones:
 - F2 no exige NFR de cierre (la tabla de NFR se mide en F1, F3 y F5).
 - Siguen abiertos: Hito F1 y comprobaciones 👁 de NFR-2/3/4 (F1); CI remoto (AC2 de US-0.1); licencia y URL del repositorio en `TBD`. Watcher, papelera y «revelar» solo probados en macOS.
 - Tag `v0.3.0` y `v0.2.0`: **no creados**; requieren autorización explícita.
+
+## US-3.1 Pestañas — 🟡 implementada, pendiente verificación 👁 AC1–AC3 (rama feat/us-3.1-pestanas)
+Plan: dividir `app.rs` (commit de refactor aparte), `mdx-app/src/app/documents.rs` (activo + aparcados), `state/tabs.rs` (orden, vecinos, `nth`), barra de pestañas en `app/mod.rs`, atajos en `shortcuts.rs`; ADR 0006.
+- AC1 🧪 varios documentos en pestañas con estado independiente (texto, historial, dirty, conflicto, vista previa); Ctrl/Cmd+W y botón × cierran la pestaña, con diálogo Guardar/Descartar/Cancelar si tiene cambios; «Guardar» muestra esa pestaña, guarda y la cierra.
+- AC2 🧪 Ctrl+Tab / Ctrl+Shift+Tab (Control también en macOS) cíclico; Ctrl/Cmd+1..8 salta a esa posición y **9 salta a la última** (como los navegadores). Los dígitos también se reconocen por tecla física (teclados donde la fila numérica exige Shift).
+- AC3 🧪 `●` en la pestaña sucia, «(eliminado)» si se borró en disco, cursiva para la pestaña «preview» y tooltip con la ruta completa (o «Sin título»).
+Decisiones:
+- **Abrir ya no reemplaza ni pregunta:** el aviso de cambios sin guardar pasa a Cerrar pestaña / Cerrar aplicación. Cerrar la aplicación revisa todas las pestañas: «Descartar» cierra esa pestaña y vuelve a preguntar por la siguiente (si luego se cancela, las ya descartadas no vuelven).
+- Un «Sin título» vacío y sin tocar se reemplaza al abrir algo; Ctrl+N no duplica «Sin título» vacíos.
+- Editar fija la pestaña preview (nunca se reemplaza una con cambios).
+- Al cerrar la última pestaña queda un «Sin título» vacío.
+- Eventos de guardado, disco y vista previa llevan `DocumentId` y funcionan sobre pestañas en segundo plano (`with_doc`); los renombrados, borrados y cambios externos afectan a todas las pestañas.
+- Vigilancia: se vigilan los directorios de **todos** los documentos abiertos que están fuera de la carpeta.
+- La barra de pestañas hace scroll horizontal si no caben.
+- ADR 0006 documenta el diseño «activo + aparcados» frente a `HashMap<DocumentId, Content>` de ARCHITECTURE.
+- `app.rs` (1 800 líneas) → `app/{mod,documents,editing,disk,explorer_ops,preview,tests}.rs`, sin cambios de comportamiento (commit `refactor(app)`).

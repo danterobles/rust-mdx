@@ -16,13 +16,21 @@ impl App {
                 watcher_stream(root.clone(), true)
             }));
         }
-        if let Some(dir) = self.doc.path.as_deref().and_then(Path::parent) {
+        // Directorios de los documentos abiertos que quedan fuera de la carpeta (sin duplicados).
+        let mut dirs: Vec<PathBuf> = Vec::new();
+        for (doc, _) in self.open_docs() {
+            let Some(dir) = doc.path.as_deref().and_then(Path::parent) else {
+                continue;
+            };
             let inside = root.as_deref().is_some_and(|r| dir.starts_with(r));
-            if !inside {
-                subs.push(Subscription::run_with(dir.to_path_buf(), |dir| {
-                    watcher_stream(dir.clone(), false)
-                }));
+            if !inside && !dirs.iter().any(|d| d == dir) {
+                dirs.push(dir.to_path_buf());
             }
+        }
+        for dir in dirs {
+            subs.push(Subscription::run_with(dir, |dir| {
+                watcher_stream(dir.clone(), false)
+            }));
         }
         Subscription::batch(subs)
     }
@@ -39,10 +47,18 @@ impl App {
                 ));
             }
         }
-        if let Some(path) = self.doc.path.clone()
-            && events.iter().any(|e| e.paths().contains(&path.as_path()))
-        {
-            let id = self.doc.id;
+        // Todos los documentos abiertos (pestañas) cuyo archivo se vio afectado.
+        let touched: Vec<(DocumentId, PathBuf)> = self
+            .open_docs()
+            .filter_map(|(doc, _)| {
+                let path = doc.path.clone()?;
+                events
+                    .iter()
+                    .any(|e| e.paths().contains(&path.as_path()))
+                    .then_some((doc.id, path))
+            })
+            .collect();
+        for (id, path) in touched {
             tasks.push(Task::perform(
                 async move {
                     let result = mdx_core::io::read_document(&path).await;

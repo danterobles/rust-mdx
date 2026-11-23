@@ -37,27 +37,31 @@ fn saved_content_is_clean_and_new_edit_is_dirty_again() {
         saved_hash: mdx_core::document::hash_text("a"),
         mtime: None,
     };
-    let _ = app.update(Message::Saved(Ok(info)));
+    let _ = app.update(Message::Saved(app.doc.id, Ok(info)));
     assert_eq!(app.title(), "x.md — Mdx");
     type_char(&mut app, 'b');
     assert_eq!(app.title(), "● x.md — Mdx");
 }
 
 #[test]
-fn discard_runs_new_and_cancel_keeps_document() {
+fn discard_closes_the_tab_and_cancel_keeps_it() {
     let (mut app, _) = App::new(None);
     type_char(&mut app, 'a');
+    let id = app.doc.id;
     let _ = app.update(Message::GuardAnswered(
-        PendingAction::New,
+        PendingAction::CloseTab(id),
         GuardChoice::Cancel,
     ));
     assert_eq!(app.content.text(), "a");
     let _ = app.update(Message::GuardAnswered(
-        PendingAction::New,
+        PendingAction::CloseTab(id),
         GuardChoice::Discard,
     ));
+    // Al cerrar la última pestaña queda un «Sin título» vacío.
     assert_eq!(app.content.text(), "");
+    assert_ne!(app.doc.id, id);
     assert_eq!(app.title(), "Sin título — Mdx");
+    assert_eq!(app.tabs.tabs().len(), 1);
 }
 
 #[test]
@@ -122,7 +126,7 @@ fn stats_follow_cursor_and_words() {
 /// Simula la llegada del resultado del parseo en segundo plano.
 fn deliver_preview(app: &mut App) {
     let items = markdown::parse(&app.doc.text).collect();
-    let _ = app.update(Message::PreviewParsed(app.preview_gen, items));
+    let _ = app.update(Message::PreviewParsed(app.doc.id, app.preview_gen, items));
 }
 
 #[test]
@@ -154,7 +158,7 @@ fn stale_preview_results_are_discarded() {
     let _ = app.update(Message::PreviewTick(edited + Duration::from_millis(150)));
     let stale = app.preview_gen - 1;
     let items = markdown::parse("# viejo").collect();
-    let _ = app.update(Message::PreviewParsed(stale, items));
+    let _ = app.update(Message::PreviewParsed(app.doc.id, stale, items));
     assert!(app.preview.is_empty());
 }
 
@@ -641,7 +645,7 @@ fn own_save_never_triggers_the_banner() {
         saved_hash: saved,
         mtime: None,
     };
-    let _ = app.update(Message::Saved(Ok(info)));
+    let _ = app.update(Message::Saved(app.doc.id, Ok(info)));
     type_char(&mut app, 'Y'); // sigue editando mientras llega el evento del guardado
     inspect(&mut app, &path, disk_version(&path, "Xbase"));
     assert_eq!(app.doc.disk_state, DiskState::InSync);
@@ -664,7 +668,7 @@ fn deleted_on_disk_is_marked_and_keeps_content_and_can_be_resaved() {
         saved_hash: mdx_core::document::hash_text("contenido"),
         mtime: None,
     };
-    let _ = app.update(Message::Saved(Ok(info)));
+    let _ = app.update(Message::Saved(app.doc.id, Ok(info)));
     assert_eq!(app.title(), "a.md — Mdx");
 }
 
@@ -705,4 +709,270 @@ fn cancelling_save_dialog_clears_pending_action() {
     assert_eq!(app.after_save, Some(PendingAction::Close));
     let _ = app.update(Message::SavePicked(None));
     assert_eq!(app.after_save, None);
+}
+
+// ---------------------------------------------------------------- US-3.1: pestañas
+
+/// Abre `name` con `text` como pestaña fija (doble clic) y devuelve su id.
+fn open_pinned_doc(app: &mut App, name: &str, text: &str) -> DocumentId {
+    let path = PathBuf::from(format!("/proyecto/{name}"));
+    let _ = app.update(Message::FilePinned(path.clone()));
+    let doc = Document::from_bytes(&path, text.as_bytes(), None).unwrap();
+    let _ = app.update(Message::DocumentLoaded(Ok(doc)));
+    app.doc.id
+}
+
+fn tab_names(app: &App) -> Vec<String> {
+    app.tabs
+        .tabs()
+        .iter()
+        .filter_map(|t| app.tab_label(t.doc))
+        .map(|l| l.name)
+        .collect()
+}
+
+#[test]
+fn opening_several_files_keeps_every_document_in_its_own_tab() {
+    // AC1
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "uno");
+    let b = open_pinned_doc(&mut app, "b.md", "dos");
+    assert_eq!(
+        tab_names(&app),
+        ["a.md", "b.md"],
+        "el «Sin título» vacío se reemplazó"
+    );
+    assert_eq!(app.doc.id, b);
+    assert!(app.parked.contains_key(&a));
+    assert_eq!(app.content.text(), "dos");
+}
+
+#[test]
+fn switching_tabs_preserves_each_documents_state() {
+    // AC1
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "uno");
+    type_char(&mut app, 'X');
+    let b = open_pinned_doc(&mut app, "b.md", "dos");
+    assert_eq!(app.content.text(), "dos");
+    assert!(!app.dirty);
+    let _ = app.update(Message::SelectTab(a));
+    assert_eq!(app.doc.id, a);
+    assert_eq!(app.content.text(), "Xuno");
+    assert_eq!(app.title(), "● a.md — Mdx");
+    assert_eq!(app.tabs.active(), Some(a));
+    // El historial de deshacer viaja con cada documento.
+    let _ = app.update(Message::Shortcut(ShortcutAction::Undo));
+    assert_eq!(app.content.text(), "uno");
+    let _ = app.update(Message::SelectTab(b));
+    assert_eq!(app.content.text(), "dos");
+}
+
+#[test]
+fn opening_an_already_open_file_activates_its_tab_without_duplicating() {
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "uno");
+    let _ = open_pinned_doc(&mut app, "b.md", "dos");
+    let _ = app.update(Message::FileClicked(PathBuf::from("/proyecto/a.md")));
+    assert_eq!(app.doc.id, a);
+    assert_eq!(app.tabs.tabs().len(), 2);
+}
+
+#[test]
+fn editing_a_preview_tab_pins_it_so_it_is_never_replaced() {
+    let (mut app, _) = App::new(None);
+    load(&mut app, "a.md"); // clic simple: preview
+    assert_eq!(unpinned_tabs(&app), 1);
+    type_char(&mut app, 'x');
+    assert_eq!(unpinned_tabs(&app), 0);
+    load(&mut app, "b.md");
+    assert_eq!(app.tabs.tabs().len(), 2, "la pestaña editada sobrevive");
+}
+
+#[test]
+fn ctrl_w_closes_a_clean_tab_and_activates_the_previous_one() {
+    // AC1
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "uno");
+    let _ = open_pinned_doc(&mut app, "b.md", "dos");
+    let _ = app.update(Message::Shortcut(ShortcutAction::CloseTab));
+    assert_eq!(tab_names(&app), ["a.md"]);
+    assert_eq!(app.doc.id, a);
+    assert_eq!(app.content.text(), "uno");
+    assert!(app.parked.is_empty());
+}
+
+#[test]
+fn closing_a_dirty_tab_asks_first_and_discard_or_cancel_resolve_it() {
+    // AC1: con cambios pendientes no se cierra hasta responder.
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "uno");
+    type_char(&mut app, 'X');
+    let _ = open_pinned_doc(&mut app, "b.md", "dos");
+    let _ = app.update(Message::CloseTab(a)); // clic en × de la pestaña sucia
+    assert_eq!(
+        tab_names(&app),
+        ["a.md", "b.md"],
+        "sigue abierta hasta responder"
+    );
+    let _ = app.update(Message::GuardAnswered(
+        PendingAction::CloseTab(a),
+        GuardChoice::Cancel,
+    ));
+    assert_eq!(app.tabs.tabs().len(), 2);
+    let _ = app.update(Message::GuardAnswered(
+        PendingAction::CloseTab(a),
+        GuardChoice::Discard,
+    ));
+    assert_eq!(tab_names(&app), ["b.md"]);
+}
+
+#[test]
+fn saving_from_the_guard_dialog_selects_the_tab_and_closes_it_after_saving() {
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "uno");
+    type_char(&mut app, 'X');
+    let _ = open_pinned_doc(&mut app, "b.md", "dos");
+    let _ = app.update(Message::GuardAnswered(
+        PendingAction::CloseTab(a),
+        GuardChoice::Save,
+    ));
+    assert_eq!(app.doc.id, a, "se muestra la pestaña que se guarda");
+    assert_eq!(app.after_save, Some(PendingAction::CloseTab(a)));
+    let info = SavedInfo {
+        path: PathBuf::from("/proyecto/a.md"),
+        saved_hash: mdx_core::document::hash_text("Xuno"),
+        mtime: None,
+    };
+    let _ = app.update(Message::Saved(a, Ok(info)));
+    assert_eq!(tab_names(&app), ["b.md"]);
+    assert!(app.after_save.is_none());
+}
+
+#[test]
+fn a_save_result_for_a_background_tab_updates_that_tab_only() {
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "uno");
+    type_char(&mut app, 'X');
+    let b = open_pinned_doc(&mut app, "b.md", "dos");
+    let info = SavedInfo {
+        path: PathBuf::from("/proyecto/a.md"),
+        saved_hash: mdx_core::document::hash_text("Xuno"),
+        mtime: None,
+    };
+    let _ = app.update(Message::Saved(a, Ok(info)));
+    assert_eq!(app.doc.id, b, "la pestaña activa no cambia");
+    assert!(app.first_dirty().is_none(), "a.md ya no está sucia");
+}
+
+#[test]
+fn closing_the_window_reviews_every_open_document() {
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "uno");
+    type_char(&mut app, 'X');
+    let _ = open_pinned_doc(&mut app, "b.md", "dos");
+    assert_eq!(
+        app.first_dirty(),
+        Some(a),
+        "hay un documento sucio en segundo plano"
+    );
+    // Descartar cierra esa pestaña y ya no queda nada pendiente.
+    let _ = app.update(Message::GuardAnswered(
+        PendingAction::Close,
+        GuardChoice::Discard,
+    ));
+    assert!(app.first_dirty().is_none());
+    assert_eq!(tab_names(&app), ["b.md"]);
+}
+
+#[test]
+fn tab_shortcuts_cycle_and_jump() {
+    // AC2
+    let (mut app, _) = App::new(None);
+    let ids: Vec<_> = ["a.md", "b.md", "c.md"]
+        .iter()
+        .map(|n| open_pinned_doc(&mut app, n, "x"))
+        .collect();
+    assert_eq!(app.doc.id, ids[2]);
+    let _ = app.update(Message::Shortcut(ShortcutAction::NextTab));
+    assert_eq!(app.doc.id, ids[0], "circular");
+    let _ = app.update(Message::Shortcut(ShortcutAction::PrevTab));
+    assert_eq!(app.doc.id, ids[2]);
+    let _ = app.update(Message::Shortcut(ShortcutAction::GoToTab(2)));
+    assert_eq!(app.doc.id, ids[1]);
+    let _ = app.update(Message::Shortcut(ShortcutAction::GoToTab(9)));
+    assert_eq!(app.doc.id, ids[2], "9 salta a la última");
+    let _ = app.update(Message::Shortcut(ShortcutAction::GoToTab(7)));
+    assert_eq!(app.doc.id, ids[2], "una posición inexistente no hace nada");
+}
+
+#[test]
+fn tab_label_shows_dirty_mark_italic_state_and_full_path_tooltip() {
+    // AC3
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "uno");
+    type_char(&mut app, 'X');
+    let b = {
+        let path = PathBuf::from("/otra/ruta/b.md");
+        let _ = app.update(Message::FileClicked(path.clone())); // clic simple → preview
+        let doc = Document::from_bytes(&path, b"dos", None).unwrap();
+        let _ = app.update(Message::DocumentLoaded(Ok(doc)));
+        app.doc.id
+    };
+    let la = app.tab_label(a).unwrap();
+    assert!(la.dirty && la.pinned);
+    assert_eq!(la.full_path, "/proyecto/a.md");
+    let lb = app.tab_label(b).unwrap();
+    assert!(!lb.dirty && !lb.pinned, "la preview se muestra en cursiva");
+    assert_eq!(lb.full_path, "/otra/ruta/b.md");
+}
+
+#[test]
+fn untitled_tab_has_a_tooltip_and_new_does_not_pile_up_empty_tabs() {
+    let (mut app, _) = App::new(None);
+    let _ = app.update(Message::Shortcut(ShortcutAction::New));
+    assert_eq!(app.tabs.tabs().len(), 1, "ya hay un «Sin título» vacío");
+    open_pinned_doc(&mut app, "a.md", "uno");
+    let _ = app.update(Message::Shortcut(ShortcutAction::New));
+    assert_eq!(tab_names(&app), ["a.md", "Sin título"]);
+    assert_eq!(app.tab_label(app.doc.id).unwrap().full_path, "Sin título");
+}
+
+#[test]
+fn external_changes_reach_documents_in_background_tabs() {
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "viejo");
+    let _ = open_pinned_doc(&mut app, "b.md", "dos");
+    let path = PathBuf::from("/proyecto/a.md");
+    let _ = app.update(Message::DiskInspected(
+        a,
+        path.clone(),
+        Document::from_bytes(&path, b"nuevo", None),
+    ));
+    assert_ne!(app.doc.id, a, "no roba el foco");
+    let _ = app.update(Message::SelectTab(a));
+    assert_eq!(app.content.text(), "nuevo");
+}
+
+#[test]
+fn renaming_updates_the_path_of_background_tabs_too() {
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "uno");
+    let _ = open_pinned_doc(&mut app, "b.md", "dos");
+    let _ = app.update(Message::OpDone(Ok(OpOutcome::Renamed {
+        from: PathBuf::from("/proyecto/a.md"),
+        to: PathBuf::from("/proyecto/z.md"),
+    })));
+    assert_eq!(app.tab_label(a).unwrap().name, "z.md");
+}
+
+#[test]
+fn deleting_a_file_marks_its_background_tab_deleted() {
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "uno");
+    let _ = open_pinned_doc(&mut app, "b.md", "dos");
+    let _ = app.update(Message::OpDone(Ok(OpOutcome::Trashed(PathBuf::from(
+        "/proyecto/a.md",
+    )))));
+    assert!(app.tab_label(a).unwrap().deleted);
 }

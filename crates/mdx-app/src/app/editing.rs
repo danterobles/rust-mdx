@@ -1,8 +1,8 @@
 //! Edición y guardado del documento activo.
 
 use super::{
-    App, CoreError, DiskState, Document, GuardChoice, Instant, MERGE_WINDOW, Message, Path,
-    PathBuf, SavedInfo, Task, count_words, editor, strings, text_editor,
+    App, CoreError, DiskState, Document, DocumentId, GuardChoice, Instant, MERGE_WINDOW, Message,
+    Path, PathBuf, SavedInfo, Task, count_words, editor, strings, text_editor,
 };
 
 impl App {
@@ -15,6 +15,8 @@ impl App {
             self.content.perform(action);
             return;
         }
+        // Editar fija la pestaña «preview» (así nunca se reemplaza una con cambios).
+        self.tabs.pin(self.doc.id);
         let before = editor::cursor_pos(&self.content);
         let mergeable = editor::is_mergeable(&action)
             && self
@@ -92,24 +94,26 @@ impl App {
     pub(super) fn save_to(&self, path: PathBuf) -> Task<Message> {
         let text = self.content.text();
         let (line_ending, has_bom) = (self.doc.line_ending, self.doc.has_bom);
+        let id = self.doc.id;
         Task::perform(
             async move { mdx_core::io::save_text(&path, &text, line_ending, has_bom).await },
-            Message::Saved,
+            move |result| Message::Saved(id, result),
         )
     }
 
     pub(super) fn handle_loaded(&mut self, result: Result<Document, CoreError>) -> Task<Message> {
         match result {
             Ok(doc) => {
-                self.content = text_editor::Content::with_text(&doc.text);
+                let pinned = self
+                    .pin_on_load
+                    .take()
+                    .is_some_and(|p| doc.path.as_deref() == Some(p.as_path()));
                 let name = doc.display_name(strings::UNTITLED);
-                self.track_tab(&doc);
-                self.doc = doc;
-                let task = self.reset_editing_state();
+                let task = self.add_doc(doc, pinned);
                 self.set_status(format!("{}: {name}", strings::STATUS_OPENED), false);
                 task
             }
-            // AC7 (US-1.1): el archivo no se abre y el documento actual queda intacto.
+            // AC7 (US-1.1): el archivo no se abre y los documentos abiertos quedan intactos.
             Err(err) => {
                 self.set_status(err.to_string(), true);
                 Task::none()
@@ -117,7 +121,28 @@ impl App {
         }
     }
 
-    pub(super) fn handle_saved(&mut self, result: Result<SavedInfo, CoreError>) -> Task<Message> {
+    /// Aplica el resultado de un guardado al documento `id` (no tiene por qué ser el activo)
+    /// y, si salió bien, continúa con la acción pendiente (cerrar pestaña o aplicación).
+    pub(super) fn handle_saved(
+        &mut self,
+        id: DocumentId,
+        result: Result<SavedInfo, CoreError>,
+    ) -> Task<Message> {
+        let saved = self
+            .with_doc(id, |app| app.apply_saved(result))
+            .unwrap_or(false);
+        if !saved {
+            self.after_save = None;
+            return Task::none();
+        }
+        match self.after_save.take() {
+            Some(action) => self.request(action),
+            None => Task::none(),
+        }
+    }
+
+    /// Actualiza el documento activo con el resultado de guardar. Devuelve si salió bien.
+    fn apply_saved(&mut self, result: Result<SavedInfo, CoreError>) -> bool {
         match result {
             Ok(info) => {
                 self.doc.path = Some(info.path);
@@ -129,32 +154,12 @@ impl App {
                 self.refresh_dirty();
                 let name = self.doc.display_name(strings::UNTITLED);
                 self.set_status(format!("{}: {name}", strings::STATUS_SAVED), false);
-                match self.after_save.take() {
-                    Some(action) => self.run(action),
-                    None => Task::none(),
-                }
+                true
             }
             Err(err) => {
-                self.after_save = None;
                 self.set_status(err.to_string(), true);
-                Task::none()
+                false
             }
-        }
-    }
-
-    /// Registra el documento recién abierto en el modelo de pestañas (INV-7).
-    pub(super) fn track_tab(&mut self, doc: &Document) {
-        // Con un solo documento en memoria, abrir otro siempre reemplaza al actual; las pestañas
-        // visibles y los varios documentos abiertos llegan con US-3.1.
-        self.tabs.close(self.doc.id);
-        let pin = self
-            .pin_on_load
-            .take()
-            .is_some_and(|p| doc.path.as_deref() == Some(p.as_path()));
-        if pin {
-            self.tabs.open_pinned(doc.id);
-        } else {
-            self.tabs.open_preview(doc.id);
         }
     }
 }

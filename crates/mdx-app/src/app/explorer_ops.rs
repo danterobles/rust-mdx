@@ -2,7 +2,7 @@
 
 use super::{
     App, ContextAction, CoreError, ExplorerKey, FilterKind, Message, Nav, OpOutcome, PROMPT_ID,
-    Path, PathBuf, PendingAction, Prompt, PromptKind, Task, explorer, fileops, strings, workspace,
+    Path, PathBuf, Prompt, PromptKind, Task, explorer, fileops, strings, workspace,
 };
 
 impl App {
@@ -189,14 +189,15 @@ impl App {
             Ok(OpOutcome::Renamed { from, to }) => {
                 self.explorer.prompt = None;
                 // AC3: el documento abierto (o uno dentro de la carpeta renombrada) sigue su ruta.
-                if let Some(new_path) = self
-                    .doc
-                    .path
-                    .as_deref()
-                    .and_then(|p| fileops::rebase_path(p, &from, &to))
-                {
-                    self.doc.path = Some(new_path);
-                }
+                self.open_docs_mut(|doc, _| {
+                    if let Some(new_path) = doc
+                        .path
+                        .as_deref()
+                        .and_then(|p| fileops::rebase_path(p, &from, &to))
+                    {
+                        doc.path = Some(new_path);
+                    }
+                });
                 self.explorer.selected = Some(to.clone());
                 let name = to.file_name().map(|n| n.to_string_lossy().into_owned());
                 self.set_status(
@@ -206,15 +207,12 @@ impl App {
                 self.reload_parent(&from, false)
             }
             Ok(OpOutcome::Trashed(path)) => {
-                if self
-                    .doc
-                    .path
-                    .as_deref()
-                    .is_some_and(|p| p.starts_with(&path))
-                {
-                    // El contenido se conserva en el editor para poder volver a guardarlo.
-                    self.doc.disk_state = mdx_core::DiskState::Deleted;
-                }
+                // El contenido se conserva en el editor para poder volver a guardarlo.
+                self.open_docs_mut(|doc, _| {
+                    if doc.path.as_deref().is_some_and(|p| p.starts_with(&path)) {
+                        doc.disk_state = mdx_core::DiskState::Deleted;
+                    }
+                });
                 if self.explorer.selected.as_deref() == Some(path.as_path()) {
                     self.explorer.selected = None;
                 }
@@ -253,20 +251,10 @@ impl App {
         )
     }
 
-    /// Clic simple (preview) o doble clic (fija) sobre un archivo del árbol.
+    /// Clic simple (pestaña preview) o doble clic (pestaña fija) sobre un archivo del árbol.
     pub(super) fn open_from_explorer(&mut self, path: PathBuf, pin: bool) -> Task<Message> {
         self.explorer.selected = Some(path.clone());
-        if self.doc.path.as_deref() == Some(path.as_path()) {
-            // Ya está abierto: solo se fija si fue doble clic.
-            if pin {
-                self.tabs.pin(self.doc.id);
-            }
-            return Task::none();
-        }
-        if pin {
-            self.pin_on_load = Some(path.clone());
-        }
-        self.request(PendingAction::OpenPath(path))
+        self.open_path(path, pin)
     }
 
     pub(super) fn explorer_key(&mut self, key: ExplorerKey) -> Task<Message> {

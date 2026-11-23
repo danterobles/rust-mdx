@@ -1,6 +1,6 @@
 //! Modelo de pestañas: una pestaña «preview» reutilizable (INV-7) y las demás fijadas.
 //!
-//! En US-2.2 solo se usa el modelo; la barra de pestañas visible llega en US-3.1.
+//! El orden del `Vec` es el orden visible de la barra de pestañas.
 
 use mdx_core::DocumentId;
 
@@ -17,8 +17,6 @@ pub struct Tabs {
     active: Option<DocumentId>,
 }
 
-// `tabs`, `active` e `is_pinned` los consumirá la barra de pestañas de US-3.1.
-#[allow(dead_code)]
 impl Tabs {
     #[must_use]
     pub fn new() -> Self {
@@ -38,6 +36,41 @@ impl Tabs {
     #[must_use]
     pub fn is_pinned(&self, doc: DocumentId) -> bool {
         self.tabs.iter().any(|t| t.doc == doc && t.pinned)
+    }
+
+    /// Activa la pestaña de `doc`. Devuelve `false` si no existe.
+    pub fn set_active(&mut self, doc: DocumentId) -> bool {
+        let exists = self.tabs.iter().any(|t| t.doc == doc);
+        if exists {
+            self.active = Some(doc);
+        }
+        exists
+    }
+
+    /// Pestaña vecina a la activa, circular: `+1` siguiente, `-1` anterior.
+    #[must_use]
+    pub fn neighbour(&self, delta: isize) -> Option<DocumentId> {
+        let len = isize::try_from(self.tabs.len()).ok()?;
+        if len == 0 {
+            return None;
+        }
+        let current = self
+            .active
+            .and_then(|a| self.tabs.iter().position(|t| t.doc == a))
+            .and_then(|i| isize::try_from(i).ok())?;
+        let index = usize::try_from((current + delta).rem_euclid(len)).ok()?;
+        self.tabs.get(index).map(|t| t.doc)
+    }
+
+    /// Pestaña en la posición `n` (base 1). `Ctrl/Cmd+9` salta siempre a la última, como en
+    /// los navegadores.
+    #[must_use]
+    pub fn nth(&self, n: usize) -> Option<DocumentId> {
+        match n {
+            0 => None,
+            9 => self.tabs.last().map(|t| t.doc),
+            _ => self.tabs.get(n - 1).map(|t| t.doc),
+        }
     }
 
     /// Abre `doc` como pestaña «preview»: reemplaza la preview existente (si la hay) o añade una.
@@ -128,6 +161,36 @@ mod tests {
         tabs.open_pinned(d[0]); // fija la preview existente
         assert_eq!(unpinned(&tabs), 0);
         assert_eq!(tabs.tabs().len(), 2);
+    }
+
+    #[test]
+    fn cycles_circularly_and_jumps_by_position() {
+        // AC2
+        let d = ids(3);
+        let mut tabs = Tabs::new();
+        for id in &d {
+            tabs.open_pinned(*id);
+        }
+        assert_eq!(tabs.active(), Some(d[2]));
+        assert_eq!(
+            tabs.neighbour(1),
+            Some(d[0]),
+            "después de la última, la primera"
+        );
+        assert_eq!(tabs.neighbour(-1), Some(d[1]));
+        assert!(tabs.set_active(d[0]));
+        assert_eq!(
+            tabs.neighbour(-1),
+            Some(d[2]),
+            "antes de la primera, la última"
+        );
+        assert_eq!(tabs.nth(2), Some(d[1]));
+        assert_eq!(tabs.nth(1), Some(d[0]));
+        assert_eq!(tabs.nth(5), None);
+        assert_eq!(tabs.nth(9), Some(d[2]), "9 = última");
+        assert_eq!(tabs.nth(0), None);
+        assert!(!tabs.set_active(DocumentId::next()));
+        assert_eq!(Tabs::new().neighbour(1), None);
     }
 
     #[test]

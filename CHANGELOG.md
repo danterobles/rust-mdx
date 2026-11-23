@@ -10,6 +10,14 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 
 ## [Unreleased]
 
+### Added
+- Pestañas: varios documentos abiertos a la vez, con `●` si tienen cambios, cursiva en la pestaña de vista previa y la ruta completa al pasar el ratón [US-3.1]
+- Ctrl/Cmd+W cierra la pestaña (con aviso si tiene cambios); Ctrl+Tab y Ctrl+Shift+Tab cambian de pestaña; Ctrl/Cmd+1…9 saltan a una pestaña [US-3.1]
+
+### Changed
+- Abrir un archivo, crear uno nuevo o abrir un enlace ya no reemplaza el documento actual: se abre en otra pestaña. El aviso de cambios sin guardar aparece al cerrar la pestaña o la aplicación (que revisa todas las pestañas) [US-3.1]
+- Editar una pestaña de vista previa la fija automáticamente [US-3.1]
+
 ## [0.3.0] - 2026-11-23
 
 ### Added

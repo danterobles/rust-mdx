@@ -1,8 +1,8 @@
 //! Vista previa en vivo y enlaces.
 
 use super::{
-    App, LinkTarget, Message, Path, PendingAction, Task, initial_panes, link, markdown,
-    panes_without_preview, strings,
+    App, LinkTarget, Message, Path, Task, initial_panes, link, markdown, panes_without_preview,
+    strings,
 };
 
 impl App {
@@ -12,6 +12,7 @@ impl App {
         self.preview_gen += 1;
         self.preview_pending = false;
         let generation = self.preview_gen;
+        let id = self.doc.id;
         let text = self.doc.text.clone();
         Task::perform(
             async move {
@@ -19,7 +20,7 @@ impl App {
                     .await
                     .unwrap_or_default()
             },
-            move |items| Message::PreviewParsed(generation, items),
+            move |items| Message::PreviewParsed(id, generation, items),
         )
     }
 
@@ -42,7 +43,7 @@ impl App {
                     Message::LinkOpened(result.map_err(|e| e.to_string()))
                 })
             }
-            LinkTarget::Markdown(path) => self.request(PendingAction::OpenPath(path)),
+            LinkTarget::Markdown(path) => self.open_path(path, false),
             LinkTarget::Unsupported => {
                 self.set_status(strings::STATUS_LINK_UNSUPPORTED.replace("{url}", url), true);
                 Task::none()

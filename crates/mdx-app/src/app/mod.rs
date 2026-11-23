@@ -1,12 +1,14 @@
 //! Estado, mensajes, `update` y `view` de la aplicación (arquitectura Elm).
 
 mod disk;
+mod documents;
 mod editing;
 mod explorer_ops;
 mod preview;
 #[cfg(test)]
 mod tests;
 
+use documents::Parked;
 use editing::{ask_unsaved, pick_file_to_open};
 use explorer_ops::pick_folder;
 
@@ -15,7 +17,7 @@ use std::time::{Duration, Instant};
 
 use futures::{SinkExt, Stream, StreamExt};
 use iced::widget::{
-    Column, Row, button, container, markdown, pane_grid, scrollable, text, text_editor,
+    Column, Row, button, container, markdown, pane_grid, scrollable, text, text_editor, tooltip,
 };
 use iced::{
     Element, Event, Font, Length, Subscription, Task, Theme, event, highlighter, keyboard, time,
@@ -44,6 +46,8 @@ use crate::strings;
 pub struct App {
     explorer: ExplorerState,
     tabs: Tabs,
+    /// Documentos abiertos que no son el activo (ver `documents`).
+    parked: Parked,
     /// Versión del disco pendiente de resolver cuando hay conflicto (banner).
     external: Option<Document>,
     /// Ruta cuyo doble clic (o apertura explícita) llegó mientras se cargaba: queda fijada.
@@ -77,13 +81,12 @@ const PREVIEW_TICK: Duration = Duration::from_millis(25);
 /// Tiempo máximo entre pulsaciones para que cuenten como un solo paso de deshacer.
 const MERGE_WINDOW: Duration = Duration::from_millis(1000);
 
-/// Acciones que descartarían el documento actual; se protegen si hay cambios sin guardar.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Acciones que descartarían cambios sin guardar; se protegen con el diálogo de confirmación.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PendingAction {
+    /// Cerrar la aplicación (revisa todos los documentos abiertos).
     Close,
-    New,
-    Open,
-    OpenPath(PathBuf),
+    CloseTab(DocumentId),
 }
 
 /// Elección del usuario ante un conflicto con el disco.
@@ -133,7 +136,9 @@ pub enum Message {
     FilePicked(Option<PathBuf>),
     DocumentLoaded(Result<Document, CoreError>),
     SavePicked(Option<PathBuf>),
-    Saved(Result<SavedInfo, CoreError>),
+    Saved(DocumentId, Result<SavedInfo, CoreError>),
+    SelectTab(DocumentId),
+    CloseTab(DocumentId),
     CloseRequested,
     GuardAnswered(PendingAction, GuardChoice),
     PreviewTick(Instant),
@@ -158,7 +163,7 @@ pub enum Message {
     WatchFailed(String),
     DiskInspected(DocumentId, PathBuf, Result<Document, CoreError>),
     ResolveConflict(ConflictChoice),
-    PreviewParsed(u64, Vec<markdown::Item>),
+    PreviewParsed(DocumentId, u64, Vec<markdown::Item>),
     LinkClicked(String),
     LinkOpened(Result<(), String>),
 }
@@ -198,6 +203,7 @@ impl App {
                     prompt: None,
                 },
                 tabs,
+                parked: Parked::new(),
                 pin_on_load,
                 external: None,
                 panes: initial_panes(),
@@ -282,13 +288,7 @@ impl App {
                 Task::none()
             }
             Message::Shortcut(action) => self.handle_shortcut(action),
-            Message::FilePicked(Some(path)) => {
-                self.pin_on_load = Some(path.clone());
-                Task::perform(
-                    async move { mdx_core::io::read_document(&path).await },
-                    Message::DocumentLoaded,
-                )
-            }
+            Message::FilePicked(Some(path)) => self.open_path(path, true),
             Message::FilePicked(None) | Message::FolderPicked(None) => Task::none(),
             Message::DocumentLoaded(result) => self.handle_loaded(result),
             Message::SavePicked(Some(path)) => self.save_to(path),
@@ -296,7 +296,12 @@ impl App {
                 self.after_save = None;
                 Task::none()
             }
-            Message::Saved(result) => self.handle_saved(result),
+            Message::Saved(id, result) => self.handle_saved(id, result),
+            Message::SelectTab(id) => {
+                self.select_tab(id);
+                Task::none()
+            }
+            Message::CloseTab(id) => self.request(PendingAction::CloseTab(id)),
             Message::CloseRequested => self.request(PendingAction::Close),
             Message::PreviewTick(now) => {
                 if self.preview_pending
@@ -311,14 +316,17 @@ impl App {
                 self.set_status(format!("{}: {err}", strings::STATUS_WATCH_FAILED), true);
                 Task::none()
             }
-            Message::DiskInspected(id, path, result) => {
-                self.handle_disk_inspected(id, &path, result)
-            }
+            Message::DiskInspected(id, path, result) => self
+                .with_doc(id, |app| app.handle_disk_inspected(id, &path, result))
+                .unwrap_or_else(Task::none),
             Message::ResolveConflict(choice) => self.resolve_conflict(choice),
-            Message::PreviewParsed(generation, items) => {
-                if generation == self.preview_gen {
-                    self.preview = items;
-                }
+            Message::PreviewParsed(id, generation, items) => {
+                // Puede llegar para un documento que ya no es el activo.
+                let _ = self.with_doc(id, |app| {
+                    if generation == app.preview_gen {
+                        app.preview = items;
+                    }
+                });
                 Task::none()
             }
             m @ (Message::FolderPicked(Some(_))
@@ -345,21 +353,27 @@ impl App {
                 }
                 Task::none()
             }
-            Message::GuardAnswered(action, choice) => match choice {
-                GuardChoice::Save => {
-                    self.after_save = Some(action);
-                    self.save()
-                }
-                GuardChoice::Discard => self.run(action),
-                GuardChoice::Cancel => Task::none(),
-            },
+            Message::GuardAnswered(action, choice) => self.guard_answered(action, choice),
         }
     }
 
     fn handle_shortcut(&mut self, action: ShortcutAction) -> Task<Message> {
         match action {
-            ShortcutAction::New => self.request(PendingAction::New),
-            ShortcutAction::Open => self.request(PendingAction::Open),
+            ShortcutAction::New => self.new_untitled(),
+            ShortcutAction::Open => Task::perform(pick_file_to_open(), Message::FilePicked),
+            ShortcutAction::CloseTab => self.request(PendingAction::CloseTab(self.doc.id)),
+            ShortcutAction::NextTab => {
+                self.cycle_tab(1);
+                Task::none()
+            }
+            ShortcutAction::PrevTab => {
+                self.cycle_tab(-1);
+                Task::none()
+            }
+            ShortcutAction::GoToTab(n) => {
+                self.goto_tab(n);
+                Task::none()
+            }
             ShortcutAction::OpenFolder => Task::perform(pick_folder(), Message::FolderPicked),
             ShortcutAction::Save => self.save(),
             ShortcutAction::SaveAs => self.save_as(),
@@ -375,34 +389,46 @@ impl App {
         }
     }
 
-    /// Ejecuta `action`, o pregunta primero si hay cambios sin guardar.
+    /// Ejecuta `action`, o pregunta primero si el documento afectado tiene cambios sin guardar.
     fn request(&mut self, action: PendingAction) -> Task<Message> {
-        if !self.dirty {
-            return self.run(action);
+        match self.guard_target(&action).filter(|id| self.is_dirty(*id)) {
+            None => self.run(action),
+            Some(id) => {
+                let name = self.doc_name(id);
+                Task::perform(ask_unsaved(name), move |choice| {
+                    Message::GuardAnswered(action, choice)
+                })
+            }
         }
-        let name = self.doc.display_name(strings::UNTITLED);
-        Task::perform(ask_unsaved(name), move |choice| {
-            Message::GuardAnswered(action.clone(), choice)
-        })
     }
 
     fn run(&mut self, action: PendingAction) -> Task<Message> {
         match action {
             PendingAction::Close => iced::exit(),
-            PendingAction::New => {
-                self.tabs.close(self.doc.id);
-                self.doc = Document::untitled();
-                self.tabs.open_pinned(self.doc.id);
-                self.content = text_editor::Content::new();
-                let task = self.reset_editing_state();
-                self.set_status(strings::STATUS_NEW.to_owned(), false);
-                task
+            PendingAction::CloseTab(id) => self.close_tab(id),
+        }
+    }
+
+    fn guard_answered(&mut self, action: PendingAction, choice: GuardChoice) -> Task<Message> {
+        let Some(id) = self.guard_target(&action) else {
+            return Task::none();
+        };
+        match choice {
+            GuardChoice::Save => {
+                // Se muestra la pestaña que se está guardando (puede pedir «Guardar como»).
+                self.select_tab(id);
+                self.after_save = Some(action);
+                self.save()
             }
-            PendingAction::Open => Task::perform(pick_file_to_open(), Message::FilePicked),
-            PendingAction::OpenPath(path) => Task::perform(
-                async move { mdx_core::io::read_document(&path).await },
-                Message::DocumentLoaded,
-            ),
+            GuardChoice::Discard => {
+                let task = self.close_tab(id);
+                match action {
+                    // Al cerrar la app puede quedar otro documento con cambios.
+                    PendingAction::Close => Task::batch([task, self.request(PendingAction::Close)]),
+                    PendingAction::CloseTab(_) => task,
+                }
+            }
+            GuardChoice::Cancel => Task::none(),
         }
     }
 
@@ -447,17 +473,77 @@ impl App {
         .into()
     }
 
+    /// Barra de pestañas: `●` si está sucia, cursiva si es «preview», tooltip con la ruta.
+    fn tab_bar(&self) -> Element<'_, Message> {
+        let mut bar = Row::new().spacing(4);
+        for tab in self.tabs.tabs() {
+            let Some(label) = self.tab_label(tab.doc) else {
+                continue;
+            };
+            let active = label.id == self.doc.id;
+            let mut title = String::new();
+            if label.dirty {
+                title.push_str(strings::DIRTY_MARK);
+            }
+            title.push_str(&label.name);
+            if label.deleted {
+                title.push_str(strings::DELETED_MARK);
+            }
+            let font = if label.pinned {
+                Font::DEFAULT
+            } else {
+                Font {
+                    style: iced::font::Style::Italic,
+                    ..Font::DEFAULT
+                }
+            };
+            let select = button(text(title).font(font))
+                .padding([3, 8])
+                .style(if active {
+                    button::primary
+                } else {
+                    button::secondary
+                })
+                .on_press(Message::SelectTab(label.id));
+            let close = button(text(strings::TAB_CLOSE).size(14))
+                .padding([3, 6])
+                .style(button::text)
+                .on_press(Message::CloseTab(label.id));
+            bar = bar.push(tooltip(
+                Row::new()
+                    .align_y(iced::Alignment::Center)
+                    .push(select)
+                    .push(close),
+                container(text(label.full_path).size(12))
+                    .padding(4)
+                    .style(container::bordered_box),
+                tooltip::Position::Bottom,
+            ));
+        }
+        scrollable(bar)
+            .direction(scrollable::Direction::Horizontal(
+                scrollable::Scrollbar::default(),
+            ))
+            .width(Length::Fill)
+            .into()
+    }
+
     pub fn view(&self) -> Element<'_, Message> {
         let theme = self.theme();
         let grid = pane_grid(&self.panes, |_, kind, _| {
             let body: Element<'_, Message> = match kind {
                 PaneKind::Explorer => explorer::view(&self.explorer, self.doc.path.as_deref()),
-                PaneKind::Editor => text_editor(&self.content)
-                    .on_action(Message::Edit)
-                    .key_binding(editor::key_binding)
-                    .font(Font::MONOSPACE)
-                    .highlight("markdown", highlighter::Theme::InspiredGitHub)
-                    .height(Length::Fill)
+                PaneKind::Editor => Column::new()
+                    .spacing(6)
+                    .push(self.tab_bar())
+                    .push(
+                        text_editor(&self.content)
+                            .on_action(Message::Edit)
+                            .key_binding(editor::key_binding)
+                            .font(Font::MONOSPACE)
+                            .highlight("markdown", highlighter::Theme::InspiredGitHub)
+                            .height(Length::Fill),
+                    )
                     .into(),
                 PaneKind::Preview => {
                     scrollable(markdown::view(&self.preview, &theme).map(Message::LinkClicked))

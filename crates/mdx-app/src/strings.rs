@@ -64,3 +64,5 @@ pub const STATUS_DELETED_ON_DISK: &str =
     "El archivo se eliminó del disco; su contenido se conserva y puede volver a guardarlo.";
 pub const STATUS_RELOADED: &str = "Archivo recargado desde el disco";
 pub const STATUS_WATCH_FAILED: &str = "No se pudo vigilar la carpeta";
+
+pub const TAB_CLOSE: &str = "×";
