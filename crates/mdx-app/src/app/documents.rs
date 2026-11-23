@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use std::mem;
 
 use super::{
-    App, DiskState, Document, DocumentId, History, Instant, Message, Path, PendingAction, Task,
-    markdown, strings, text_editor,
+    App, DiskState, Document, DocumentId, History, Instant, Message, Outline, Path, PendingAction,
+    Task, markdown, strings, text_editor,
 };
 
 /// Estado completo de un documento abierto que no es el activo.
@@ -26,6 +26,7 @@ pub(super) struct OpenDoc {
     pub(super) preview_pending: bool,
     pub(super) preview_edit_at: Instant,
     pub(super) external: Option<Document>,
+    pub(super) outline: Outline,
 }
 
 pub(super) type Parked = HashMap<DocumentId, OpenDoc>;
@@ -45,6 +46,7 @@ impl App {
             preview_pending: mem::take(&mut self.preview_pending),
             preview_edit_at: self.preview_edit_at,
             external: self.external.take(),
+            outline: mem::take(&mut self.outline),
         }
     }
 
@@ -60,6 +62,7 @@ impl App {
         self.preview_pending = d.preview_pending;
         self.preview_edit_at = d.preview_edit_at;
         self.external = d.external;
+        self.outline = d.outline;
     }
 
     /// Intercambia el documento activo con el aparcado `id`. No toca el modelo de pestañas.

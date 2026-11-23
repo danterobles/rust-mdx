@@ -126,7 +126,13 @@ fn stats_follow_cursor_and_words() {
 /// Simula la llegada del resultado del parseo en segundo plano.
 fn deliver_preview(app: &mut App) {
     let items = markdown::parse(&app.doc.text).collect();
-    let _ = app.update(Message::PreviewParsed(app.doc.id, app.preview_gen, items));
+    let outline = mdx_core::outline::extract(&app.doc.text);
+    let _ = app.update(Message::PreviewParsed(
+        app.doc.id,
+        app.preview_gen,
+        items,
+        outline,
+    ));
 }
 
 #[test]
@@ -158,7 +164,7 @@ fn stale_preview_results_are_discarded() {
     let _ = app.update(Message::PreviewTick(edited + Duration::from_millis(150)));
     let stale = app.preview_gen - 1;
     let items = markdown::parse("# viejo").collect();
-    let _ = app.update(Message::PreviewParsed(app.doc.id, stale, items));
+    let _ = app.update(Message::PreviewParsed(app.doc.id, stale, items, Vec::new()));
     assert!(app.preview.is_empty());
 }
 
@@ -975,4 +981,112 @@ fn deleting_a_file_marks_its_background_tab_deleted() {
         "/proyecto/a.md",
     )))));
     assert!(app.tab_label(a).unwrap().deleted);
+}
+
+// ---------------------------------------------------------------- US-3.2: esquema
+
+fn type_text(app: &mut App, text: &str) {
+    for c in text.chars() {
+        if c == '\n' {
+            let _ = app.update(Message::Edit(Action::Edit(Edit::Enter)));
+        } else {
+            type_char(app, c);
+        }
+    }
+}
+
+#[test]
+fn outline_is_empty_until_the_debounced_parse_arrives() {
+    // AC3: mismo debounce que la vista previa.
+    let (mut app, _) = App::new(None);
+    type_text(&mut app, "# Uno\n## Dos");
+    assert_eq!(app.outline, Vec::new());
+    let edited = app.preview_edit_at;
+    let _ = app.update(Message::PreviewTick(edited + Duration::from_millis(100)));
+    assert!(app.preview_pending, "aún dentro del debounce");
+    let _ = app.update(Message::PreviewTick(edited + Duration::from_millis(150)));
+    deliver_preview(&mut app);
+    let shown: Vec<_> = app
+        .outline
+        .iter()
+        .map(|h| (h.level, h.text.as_str(), h.line))
+        .collect();
+    assert_eq!(shown, [(1, "Uno", 0), (2, "Dos", 1)]);
+}
+
+#[test]
+fn outline_keeps_updating_when_the_preview_is_hidden() {
+    let (mut app, _) = App::new(None);
+    let _ = app.update(Message::Shortcut(ShortcutAction::TogglePreview));
+    assert!(!app.preview_visible);
+    type_text(&mut app, "# Solo esquema");
+    let edited = app.preview_edit_at;
+    let _ = app.update(Message::PreviewTick(edited + Duration::from_millis(150)));
+    assert!(
+        !app.preview_pending,
+        "se parsea aunque la vista previa esté oculta"
+    );
+    deliver_preview(&mut app);
+    assert_eq!(app.outline.len(), 1);
+}
+
+#[test]
+fn clicking_a_heading_moves_the_cursor_to_its_line() {
+    // AC2
+    let (mut app, _) = App::new(None);
+    type_text(&mut app, "# Uno\n\ntexto\n\n## Dos\nfin");
+    let line = 4;
+    let _ = app.update(Message::GoToLine(line));
+    assert_eq!(editor::cursor_pos(&app.content), (4, 0));
+    // Una línea fuera de rango se acota a la última.
+    let _ = app.update(Message::GoToLine(999));
+    assert_eq!(editor::cursor_pos(&app.content).0, 5);
+    // Mover el cursor no es una edición: el documento no queda sucio por ello.
+    let before = app.dirty;
+    let _ = app.update(Message::GoToLine(0));
+    assert_eq!(app.dirty, before);
+}
+
+#[test]
+fn sidebar_switches_between_files_and_outline() {
+    // AC1
+    let (mut app, _) = App::new(None);
+    assert_eq!(app.sidebar, Sidebar::Files);
+    let _ = app.update(Message::SetSidebar(Sidebar::Outline));
+    assert_eq!(app.sidebar, Sidebar::Outline);
+    let _ = app.update(Message::SetSidebar(Sidebar::Files));
+    assert_eq!(app.sidebar, Sidebar::Files);
+}
+
+#[test]
+fn each_tab_has_its_own_outline() {
+    // AC1: el esquema es el del documento activo.
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "# De A");
+    deliver_preview(&mut app);
+    let b = open_pinned_doc(&mut app, "b.md", "# De B\n## Sub B");
+    deliver_preview(&mut app);
+    assert_eq!(app.outline.len(), 2);
+    let _ = app.update(Message::SelectTab(a));
+    assert_eq!(app.outline.len(), 1);
+    assert_eq!(app.outline[0].text, "De A");
+    let _ = app.update(Message::SelectTab(b));
+    assert_eq!(app.outline[1].text, "Sub B");
+}
+
+#[test]
+fn a_stale_outline_result_is_ignored() {
+    let (mut app, _) = App::new(None);
+    type_char(&mut app, 'a');
+    let edited = app.preview_edit_at;
+    let _ = app.update(Message::PreviewTick(edited + Duration::from_millis(150)));
+    let stale = app.preview_gen - 1;
+    let outline = mdx_core::outline::extract("# viejo");
+    let _ = app.update(Message::PreviewParsed(
+        app.doc.id,
+        stale,
+        Vec::new(),
+        outline,
+    ));
+    assert_eq!(app.outline, Vec::new());
 }

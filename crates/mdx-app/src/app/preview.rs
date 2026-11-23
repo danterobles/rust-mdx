@@ -14,13 +14,22 @@ impl App {
         let generation = self.preview_gen;
         let id = self.doc.id;
         let text = self.doc.text.clone();
+        // El esquema se calcula siempre; los elementos de la vista previa solo si está visible.
+        let want_items = self.preview_visible;
         Task::perform(
             async move {
-                tokio::task::spawn_blocking(move || markdown::parse(&text).collect::<Vec<_>>())
-                    .await
-                    .unwrap_or_default()
+                tokio::task::spawn_blocking(move || {
+                    let items = if want_items {
+                        markdown::parse(&text).collect::<Vec<_>>()
+                    } else {
+                        Vec::new()
+                    };
+                    (items, mdx_core::outline::extract(&text))
+                })
+                .await
+                .unwrap_or_default()
             },
-            move |items| Message::PreviewParsed(id, generation, items),
+            move |(items, outline)| Message::PreviewParsed(id, generation, items, outline),
         )
     }
 

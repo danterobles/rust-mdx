@@ -4,6 +4,7 @@ mod app;
 mod editor;
 mod explorer;
 mod layout;
+mod outline;
 mod shortcuts;
 mod state;
 mod statusbar;

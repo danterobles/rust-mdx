@@ -112,9 +112,9 @@
 - [x] AC3 `●` y tooltip 👁
 
 ### US-3.2 Outline
-- [ ] AC1 Lista H1–H6 indentada 👁
-- [ ] AC2 Clic posiciona cursor 👁
-- [ ] AC3 Extracción con snapshots 🧪
+- [x] AC1 Lista H1–H6 indentada 👁
+- [x] AC2 Clic posiciona cursor 👁
+- [x] AC3 Extracción con snapshots 🧪 — `outline::tests::*` (snapshot `insta`), `app::tests::outline_is_empty_until_the_debounced_parse_arrives`, `outline_keeps_updating_when_the_preview_is_hidden`
 
 ### US-3.3 Scroll sincronizado
 - [ ] AC1 Sincronía editor→preview 👁
