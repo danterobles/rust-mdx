@@ -67,10 +67,10 @@
 - [x] AC5 Barra de estado (línea:col, palabras, EOL, codificación) 🧪 conteo + 👁
 
 ### US-1.4 Vista previa
-- [~] AC1 Debounce ≤ 150 ms 👁 (🧪 `app::tests::preview_updates_only_after_debounce`; verificación visual pendiente)
-- [~] AC2 Elementos CommonMark + GFM 👁 (fixture `fixtures/gfm_showcase.md`; verificación visual pendiente)
-- [~] AC3 Enlaces externos y relativos 👁 (🧪 `link::tests::*`, `app::tests::unsupported_link_reports_error_and_keeps_document`; verificación visual pendiente)
-- [~] AC4 Ctrl/Cmd+\ alterna preview 👁 (🧪 `app::tests::toggle_preview_hides_and_restores_pane`, `shortcuts::tests::maps_toggle_preview_by_physical_key`; verificación visual pendiente)
+- [x] AC1 Debounce ≤ 150 ms 👁
+- [x] AC2 Elementos CommonMark + GFM 👁 (fixture `fixtures/gfm_showcase.md`)
+- [x] AC3 Enlaces externos y relativos 👁
+- [x] AC4 Ctrl/Cmd+\ alterna preview 👁
 
 - [ ] **Hito F1**: editar el README del repo sin pérdida de datos 👁
 

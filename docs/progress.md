@@ -73,7 +73,7 @@ Decisiones:
 - Columna mostrada en caracteres (no bytes).
 - Verificación 👁 AC1–AC5 confirmada manualmente por el propietario el 2026-11-23.
 
-## US-1.4 Vista previa en vivo — 🟡 implementada, pendiente verificación 👁 AC1–AC4 (rama feat/us-1.4-preview)
+## US-1.4 Vista previa en vivo — ✅ completa (rama feat/us-1.4-preview)
 Plan: `mdx-core::link` (clasificación de enlaces), `mdx-app` (`app.rs`: preview, debounce, enlaces, toggle; `layout.rs`; `shortcuts.rs`), `fixtures/gfm_showcase.md`.
 - AC1 🧪 `app::tests::preview_updates_only_after_debounce`, `loaded_document_renders_preview_immediately`; 👁 pendiente. Debounce: `time::every(25 ms)` solo mientras `preview_pending`; re-parsea cuando `now - última edición ≥ 150 ms` (ARCHITECTURE decía 50 ms de tick: se bajó a 25 ms para quedar más cerca de «≤ 150 ms»).
 - AC2 👁 `iced::widget::markdown` (pulldown-cmark con tablas, tachado y listas de tareas activados por iced); código resaltado vía feature `highlighter`. Verificar con `fixtures/gfm_showcase.md`.
@@ -87,3 +87,4 @@ Decisiones:
 - `open::that_detached` se ejecuta dentro de un `Task` (no en `update`).
 - Enlaces a `.md` relativos requieren que el documento tenga ruta; sin ruta se informa «Enlace no soportado».
 - Imágenes: fuera de esta historia (US-4.4).
+- Verificación 👁 AC1–AC4 confirmada manualmente por el propietario el 2026-11-23.
