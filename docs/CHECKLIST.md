@@ -136,8 +136,8 @@
 ## Fase 4 — Pulido → v0.5.0
 
 ### US-4.1 Temas
-- [ ] AC1 Claro / oscuro / sistema 👁
-- [ ] AC2 Preview con paleta del tema 👁
+- [x] AC1 Claro / oscuro / sistema 👁
+- [x] AC2 Preview con paleta del tema 👁
 
 ### US-4.2 Configuración
 - [x] AC1 `config.toml` en dir de SO 🧪 — `paths::tests::*`, `config::tests::ensure_file_creates_the_template_once_and_never_overwrites`

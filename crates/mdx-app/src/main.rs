@@ -14,6 +14,7 @@ mod shortcuts;
 mod state;
 mod statusbar;
 mod strings;
+mod theme;
 
 use anyhow::Result;
 use tracing_subscriber::EnvFilter;
