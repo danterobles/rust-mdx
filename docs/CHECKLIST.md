@@ -154,7 +154,7 @@
 - [ ] AC2 Pegar imagen → `./assets/` 🧪 + 👁
 
 ### US-4.5 Zoom
-- [~] AC1 Ctrl/Cmd +/-/0 👁 (🧪 `shortcuts::tests::maps_zoom_shortcuts`, `app::tests::zoom_*`, `zoom::tests::*`, `editor::tests::zoom_scales_*`; verificación visual pendiente)
+- [x] AC1 Ctrl/Cmd +/-/0 👁
 
 - [ ] **Hito F4**: app usable a diario con config personalizada 👁
 
