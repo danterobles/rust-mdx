@@ -9,6 +9,7 @@ publish = false
 description = "Lógica pura de Mdx (sin UI)"
 
 [dependencies]
+comrak.workspace = true
 directories.workspace = true
 futures.workspace = true
 ignore.workspace = true

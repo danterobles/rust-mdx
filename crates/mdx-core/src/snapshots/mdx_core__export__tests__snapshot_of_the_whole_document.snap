@@ -1,0 +1,19 @@
+---
+source: crates/mdx-core/src/export.rs
+expression: without_css
+---
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mi &lt;nota&gt; &amp; más</title>
+<style>/* CSS */</style>
+</head>
+<body>
+<article>
+<h1 id="hola">Hola<a href="#hola" aria-label="Link to heading 'Hola'" data-heading-content="Hola" class="anchor"></a></h1>
+<p>texto</p>
+</article>
+</body>
+</html>

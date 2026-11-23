@@ -2283,3 +2283,37 @@ fn zoom_changes_do_not_touch_the_document() {
     assert_eq!(app.content.text(), "texto");
     assert_eq!(app.title(), "a.md — Mdx");
 }
+
+// ------------------------------------------------------- US-4.3: exportar HTML
+
+#[test]
+fn exporting_reports_the_written_path_or_the_error() {
+    // AC1
+    let (mut app, _) = App::new(None);
+    let _ = app.update(Message::HtmlExported(Ok(PathBuf::from("/tmp/doc.html"))));
+    assert_eq!(
+        app.status.as_ref().map(|s| (s.text.as_str(), s.is_error)),
+        Some(("Exportado: /tmp/doc.html", false))
+    );
+    let _ = app.update(Message::HtmlExported(Err(CoreError::PermissionDenied(
+        PathBuf::from("/x"),
+    ))));
+    assert!(app.status.as_ref().is_some_and(|s| s.is_error));
+}
+
+#[test]
+fn cancelling_the_export_dialog_does_nothing_and_exporting_never_touches_the_document() {
+    let (mut app, _) = App::new(None);
+    open_with(&mut app, "# Título");
+    type_char(&mut app, 'x');
+    let before = (app.content.text(), app.dirty);
+    let _ = app.update(Message::HtmlExportPicked(None));
+    let _ = app.update(Message::ExportHtml);
+    let _ = app.update(Message::Shortcut(ShortcutAction::ExportHtml));
+    assert_eq!(
+        (app.content.text(), app.dirty),
+        before,
+        "el documento sigue sin guardar y sin cambios"
+    );
+    assert!(app.status.as_ref().is_none_or(|s| !s.is_error));
+}

@@ -11,6 +11,7 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 ## [Unreleased]
 
 ### Added
+- Exportar a HTML autocontenido (botón «Exportar HTML» en la vista previa o `Ctrl/Cmd+Shift+E`): CommonMark + GFM (tablas, tareas, tachado, notas al pie), CSS embebido que se adapta al modo claro/oscuro, sin ejecutar el HTML crudo del documento [US-4.3]
 - Zoom del editor y de la vista previa con `Ctrl/Cmd +`, `Ctrl/Cmd -` (pasos del 10 %, de 50 % a 300 %) y `Ctrl/Cmd 0` (vuelve al valor de `appearance.zoom`). El último zoom se recuerda entre sesiones [US-4.5]
 - Temas claro y oscuro; por defecto la interfaz sigue al modo claro/oscuro del sistema y cambia al instante cuando este cambia. Se fija con `[appearance] theme = "light" | "dark" | "system"`. La vista previa, el esquema, el explorador y el resaltado del editor usan la paleta del tema activo [US-4.1]
 - Configuración en `config.toml`: fuente y tamaño del editor, ajuste de línea, autoguardado, filtros del explorador (ocultos, `.gitignore`, solo Markdown), vista previa visible/sincronizada, tema y zoom (estos dos, reservados). `Ctrl/Cmd+,` abre el archivo en una pestaña (creando una plantilla comentada la primera vez) y los cambios se aplican al guardarlo. Un archivo con errores se ignora con un aviso sin modificarlo; los valores fuera de rango se acotan [US-4.2]

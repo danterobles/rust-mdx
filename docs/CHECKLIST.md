@@ -146,8 +146,8 @@
 - [x] AC4 Config inválida → defaults, sin crash 🧪 (INV-6) — `config::tests::invalid_not_overwritten`, `invalid_toml_wrong_types_unknown_theme_and_newer_schema_are_errors`, `app::tests::a_reloaded_valid_config_is_confirmed_and_an_invalid_one_falls_back_to_defaults`; arranque real con config válida e inválida sin errores y sin tocar el archivo
 
 ### US-4.3 Exportar HTML
-- [ ] AC1 HTML autocontenido 👁
-- [ ] AC2 Snapshot test 🧪
+- [x] AC1 HTML autocontenido 👁
+- [x] AC2 Snapshot test 🧪 — `export::tests::snapshot_of_the_exported_body`, `snapshot_of_the_whole_document` (`insta`)
 
 ### US-4.4 Imágenes
 - [ ] AC1 Imágenes relativas en preview 👁

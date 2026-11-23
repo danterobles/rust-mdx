@@ -142,7 +142,7 @@ Identificador: `mx.doitconsulting.mdx` (pendiente de confirmar, PRD §12).
 
 ## 8. Política de licencias (`deny.toml`)
 
-Permitidas: `MIT`, `Apache-2.0`, `Apache-2.0 WITH LLVM-exception`, `BSD-2-Clause`, `BSD-3-Clause`, `ISC`, `Zlib`, `Unicode-3.0`, `MPL-2.0`, `CC0-1.0`, `OFL-1.1` (fuentes), `BSL-1.0` y `NCSA` (permisivas, solo transitivas de iced; añadidas en US-0.2).
+Permitidas: `MIT`, `Apache-2.0`, `Apache-2.0 WITH LLVM-exception`, `BSD-2-Clause`, `BSD-3-Clause`, `ISC`, `Zlib`, `Unicode-3.0`, `MPL-2.0`, `CC0-1.0`, `OFL-1.1` (fuentes), `BSL-1.0` y `NCSA` (permisivas, solo transitivas de iced; añadidas en US-0.2) y `Unicode-DFS-2016` (transitiva de `comrak`, equivalente a `Unicode-3.0`; añadida en US-4.3).
 Prohibidas: `GPL-*`, `AGPL-*`, `LGPL-*` (salvo ADR), licencias desconocidas.
 
 ## 9. Política de actualización de dependencias

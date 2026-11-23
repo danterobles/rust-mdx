@@ -262,6 +262,9 @@ pub enum Message {
     PreviewParsed(DocumentId, u64, Parsed),
     PreviewMeasured(DocumentId, Layout),
     SetSyncScroll(bool),
+    ExportHtml,
+    HtmlExportPicked(Option<(PathBuf, String, String)>),
+    HtmlExported(Result<PathBuf, CoreError>),
     LayoutChanged,
     SetSidebar(Sidebar),
     GoToLine(usize),
@@ -508,7 +511,8 @@ impl App {
                 Task::none()
             }
             Message::GoToLine(line) => self.go_to_line(line),
-            m @ (Message::ConfigLoaded(_)
+            m @ (Message::SystemTheme(_)
+            | Message::ConfigLoaded(_)
             | Message::ConfigReloaded(_)
             | Message::ConfigFileReady(_)
             | Message::SessionBooted(_)
@@ -518,12 +522,10 @@ impl App {
             m @ (Message::PreviewTick(_)
             | Message::PreviewParsed(..)
             | Message::PreviewMeasured(..)
-            | Message::SetSyncScroll(_)) => self.update_preview(m),
-            Message::SystemTheme(mode) => {
-                tracing::debug!(?mode, "modo de tema informado por el sistema");
-                self.system_mode = mode;
-                Task::none()
-            }
+            | Message::SetSyncScroll(_)
+            | Message::ExportHtml
+            | Message::HtmlExportPicked(_)
+            | Message::HtmlExported(_)) => self.update_preview(m),
             Message::EscapePressed => {
                 if self.find.open {
                     self.close_find();
@@ -593,6 +595,7 @@ impl App {
             }
             ShortcutAction::TogglePreview => self.toggle_preview(),
             ShortcutAction::OpenConfig => self.open_config(),
+            ShortcutAction::ExportHtml => self.export_html(),
             ShortcutAction::ZoomIn => self.change_zoom(ZoomChange::Step(1)),
             ShortcutAction::ZoomOut => self.change_zoom(ZoomChange::Step(-1)),
             ShortcutAction::ZoomReset => self.change_zoom(ZoomChange::Reset),
@@ -768,6 +771,66 @@ impl App {
             .into()
     }
 
+    fn editor_pane(&self, theme: &Theme) -> Element<'_, Message> {
+        Column::new()
+            .spacing(6)
+            .push(self.tab_bar())
+            .extend(self.find.open.then(|| search_ui::find_bar(&self.find)))
+            .push(
+                text_editor(&self.content)
+                    .on_action(Message::Edit)
+                    .key_binding(editor::key_binding)
+                    .font(self.editor_font)
+                    .size(editor::zoomed_px(self.config.editor.font_size, self.zoom))
+                    .wrapping(editor::wrapping(self.config.editor.line_wrap))
+                    .highlight("markdown", theme::highlight_theme(theme))
+                    .height(Length::Fill),
+            )
+            .into()
+    }
+
+    fn preview_pane(&self, theme: &Theme) -> Element<'_, Message> {
+        let settings = markdown::Settings::with_text_size(
+            PREVIEW_BASE_TEXT_PX * self.zoom,
+            markdown::Style::from(theme),
+        );
+        let blocks = self.preview.iter().enumerate().map(|(i, item)| {
+            container(markdown::item(&PreviewViewer, settings, item, i))
+                .id(preview_sync::block_id(i))
+                .into()
+        });
+        let column: Element<'_, String> = Column::with_children(blocks)
+            .spacing(settings.spacing)
+            .into();
+        Column::new()
+            .spacing(6)
+            .push(
+                Row::new()
+                    .spacing(12)
+                    .align_y(iced::Alignment::Center)
+                    .push(
+                        checkbox(self.sync == SyncScroll::On)
+                            .label(strings::SYNC_SCROLL)
+                            .size(16)
+                            .text_size(13)
+                            .on_toggle(Message::SetSyncScroll),
+                    )
+                    .push(
+                        button(text(strings::EXPORT_HTML).size(12))
+                            .padding([2, 8])
+                            .style(button::secondary)
+                            .on_press(Message::ExportHtml),
+                    ),
+            )
+            .push(
+                scrollable(column.map(Message::LinkClicked))
+                    .id(iced::widget::Id::new(preview_sync::SCROLL_ID))
+                    .width(Length::Fill)
+                    .height(Length::Fill),
+            )
+            .into()
+    }
+
     pub fn view(&self) -> Element<'_, Message> {
         let theme = self.theme();
         let grid = pane_grid(&self.panes, |_, kind, _| {
@@ -788,51 +851,8 @@ impl App {
                         ),
                     })
                     .into(),
-                PaneKind::Editor => Column::new()
-                    .spacing(6)
-                    .push(self.tab_bar())
-                    .extend(self.find.open.then(|| search_ui::find_bar(&self.find)))
-                    .push(
-                        text_editor(&self.content)
-                            .on_action(Message::Edit)
-                            .key_binding(editor::key_binding)
-                            .font(self.editor_font)
-                            .size(editor::zoomed_px(self.config.editor.font_size, self.zoom))
-                            .wrapping(editor::wrapping(self.config.editor.line_wrap))
-                            .highlight("markdown", theme::highlight_theme(&theme))
-                            .height(Length::Fill),
-                    )
-                    .into(),
-                PaneKind::Preview => {
-                    let settings = markdown::Settings::with_text_size(
-                        PREVIEW_BASE_TEXT_PX * self.zoom,
-                        markdown::Style::from(&theme),
-                    );
-                    let blocks = self.preview.iter().enumerate().map(|(i, item)| {
-                        container(markdown::item(&PreviewViewer, settings, item, i))
-                            .id(preview_sync::block_id(i))
-                            .into()
-                    });
-                    let column: Element<'_, String> = Column::with_children(blocks)
-                        .spacing(settings.spacing)
-                        .into();
-                    Column::new()
-                        .spacing(6)
-                        .push(
-                            checkbox(self.sync == SyncScroll::On)
-                                .label(strings::SYNC_SCROLL)
-                                .size(16)
-                                .text_size(13)
-                                .on_toggle(Message::SetSyncScroll),
-                        )
-                        .push(
-                            scrollable(column.map(Message::LinkClicked))
-                                .id(iced::widget::Id::new(preview_sync::SCROLL_ID))
-                                .width(Length::Fill)
-                                .height(Length::Fill),
-                        )
-                        .into()
-                }
+                PaneKind::Editor => self.editor_pane(&theme),
+                PaneKind::Preview => self.preview_pane(&theme),
             };
             pane_grid::Content::new(
                 container(body)

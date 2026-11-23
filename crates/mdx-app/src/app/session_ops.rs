@@ -52,6 +52,11 @@ impl App {
     /// Mensajes de configuración, sesión, recientes y autoguardado.
     pub(super) fn update_session(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::SystemTheme(mode) => {
+                tracing::debug!(?mode, "modo de tema informado por el sistema");
+                self.system_mode = mode;
+                Task::none()
+            }
             Message::ConfigLoaded(loaded) => self.apply_config(loaded, false),
             Message::ConfigReloaded(loaded) => self.apply_config(loaded, true),
             Message::ConfigFileReady(result) => match result {

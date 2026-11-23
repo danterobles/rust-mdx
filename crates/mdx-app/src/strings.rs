@@ -113,3 +113,8 @@ pub const CONFIG_APPLIED: &str = "Configuración aplicada";
 pub const CONFIG_NO_DIR: &str = "No se pudo determinar el directorio de configuración.";
 
 pub const STATUS_ZOOM: &str = "Zoom: {percent} %";
+
+pub const EXPORT_HTML: &str = "Exportar HTML";
+pub const DIALOG_EXPORT_TITLE: &str = "Exportar a HTML";
+pub const FILTER_HTML: &str = "Documento HTML";
+pub const STATUS_EXPORTED: &str = "Exportado";

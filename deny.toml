@@ -20,6 +20,7 @@ allow = [
   "OFL-1.1",
   "BSL-1.0",   # clipboard-win, error-code (transitivas de iced)
   "NCSA",      # libfuzzer-sys (transitiva: image → rav1e)
+  "Unicode-DFS-2016",   # finl_unicode (transitiva de comrak); equivalente a Unicode-3.0
 ]
 
 [licenses.private]
