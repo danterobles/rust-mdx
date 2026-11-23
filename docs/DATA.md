@@ -206,7 +206,7 @@ Todos los archivos de Mdx se escriben con `io::write_atomic`.
 
 Las variables de entorno `MDX_CONFIG_DIR` y `MDX_STATE_DIR` sustituyen los directorios anteriores (pruebas, instalaciones portables).
 
-> **Estado de implementación (US-4.2):** se leen y validan todos los ajustes. Se aplican: `editor.font_family`, `editor.font_size`, `editor.line_wrap`, `preview.*` y `files.*`. `editor.tab_width` e `insert_spaces` quedan reservados (iced 0.14 no permite configurarlos) y `appearance.theme` se aplica desde US-4.1 y `appearance.zoom` se aplicará en US-4.5. Mdx **nunca modifica** `config.toml` salvo para crear la plantilla (`Config::ensure_file`) cuando no existe y el usuario pulsa `Ctrl/Cmd+,`.
+> **Estado de implementación (US-4.2):** se leen y validan todos los ajustes. Se aplican: `editor.font_family`, `editor.font_size`, `editor.line_wrap`, `preview.*` y `files.*`. `editor.tab_width` e `insert_spaces` quedan reservados (iced 0.14 no permite configurarlos) y `appearance.theme` se aplica desde US-4.1 y `appearance.zoom` desde US-4.5 (es el zoom inicial; el elegido con el teclado se guarda en `session.toml` y prevalece hasta que se recargue `config.toml`). Mdx **nunca modifica** `config.toml` salvo para crear la plantilla (`Config::ensure_file`) cuando no existe y el usuario pulsa `Ctrl/Cmd+,`.
 
 ### 4.1 `config.toml` (editable por el usuario)
 
@@ -255,6 +255,7 @@ pub struct Config { pub schema_version: u32, pub editor: EditorConfig, pub previ
 schema_version = 1
 workspace = "/home/dante/repos/mdx"     # opcional
 active_tab = 1                          # índice en open_files
+zoom = 1.2                              # opcional: el último zoom elegido con Ctrl/Cmd +/-/0
 
 open_files = [
   "/home/dante/repos/mdx/README.md",

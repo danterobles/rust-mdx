@@ -134,6 +134,12 @@ pub fn font_px(size: u32) -> f32 {
     f32::from(u16::try_from(size).unwrap_or(14))
 }
 
+/// Tamaño de fuente efectivo: el de la configuración multiplicado por el zoom.
+#[must_use]
+pub fn zoomed_px(size: u32, zoom: f32) -> f32 {
+    (font_px(size) * zoom).max(1.0)
+}
+
 /// `true` si la acción continúa una ráfaga de tecleo/borrado (se fusiona en el historial).
 #[must_use]
 pub fn is_mergeable(action: &text_editor::Action) -> bool {
@@ -156,6 +162,14 @@ mod tests {
             resolve_font("Fuente Que No Existe 12345"),
             iced::Font::MONOSPACE
         );
+    }
+
+    #[test]
+    fn zoom_scales_the_configured_font_size() {
+        assert!((zoomed_px(14, 1.0) - 14.0).abs() < f32::EPSILON);
+        assert!((zoomed_px(14, 2.0) - 28.0).abs() < f32::EPSILON);
+        assert!((zoomed_px(8, 0.5) - 4.0).abs() < f32::EPSILON);
+        assert!(zoomed_px(8, 0.0) >= 1.0, "nunca un tamaño nulo");
     }
 
     #[test]

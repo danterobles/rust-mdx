@@ -111,3 +111,5 @@ pub const SESSION_SAVE_FAILED: &str = "No se pudo guardar la sesión";
 
 pub const CONFIG_APPLIED: &str = "Configuración aplicada";
 pub const CONFIG_NO_DIR: &str = "No se pudo determinar el directorio de configuración.";
+
+pub const STATUS_ZOOM: &str = "Zoom: {percent} %";

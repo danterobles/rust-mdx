@@ -83,6 +83,9 @@ pub struct Session {
     pub expanded_dirs: Vec<PathBuf>,
     pub layout: Layout,
     pub recent: Recent,
+    /// Zoom elegido con `Ctrl/Cmd +/-/0` (sustituye al de `config.toml` hasta que este cambie).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zoom: Option<f32>,
 }
 
 impl Default for Session {
@@ -95,6 +98,7 @@ impl Default for Session {
             expanded_dirs: Vec::new(),
             layout: Layout::default(),
             recent: Recent::default(),
+            zoom: None,
         }
     }
 }
@@ -158,6 +162,10 @@ impl Session {
     /// Acota proporciones y listas de recientes.
     pub fn sanitize(&mut self) {
         self.layout = self.layout.sanitized();
+        self.zoom = self
+            .zoom
+            .filter(|z| z.is_finite())
+            .map(|z| z.clamp(0.5, 3.0));
         for list in [&mut self.recent.folders, &mut self.recent.files] {
             let mut seen: Vec<PathBuf> = Vec::new();
             list.retain(|p| {
@@ -315,6 +323,25 @@ mod tests {
         let text = s.to_toml().unwrap();
         assert!(text.contains("schema_version = 1"));
         assert_eq!(Session::parse(&text).unwrap(), s);
+    }
+
+    #[test]
+    fn zoom_roundtrips_and_is_clamped() {
+        let with_zoom = Session {
+            zoom: Some(1.5),
+            ..Session::default()
+        };
+        let text = with_zoom.to_toml().unwrap();
+        assert!(text.contains("zoom = 1.5"));
+        assert_eq!(Session::parse(&text).unwrap().zoom, Some(1.5));
+        assert_eq!(Session::parse("zoom = 99.0\n").unwrap().zoom, Some(3.0));
+        assert_eq!(Session::parse("zoom = 0.01\n").unwrap().zoom, Some(0.5));
+        assert_eq!(
+            Session::parse("").unwrap().zoom,
+            None,
+            "sesiones antiguas sin zoom"
+        );
+        assert!(!Session::default().to_toml().unwrap().contains("zoom"));
     }
 
     #[test]

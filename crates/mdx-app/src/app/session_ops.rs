@@ -9,6 +9,7 @@ use mdx_core::paths::AppFiles;
 use mdx_core::session::{Boot, Layout, Session};
 use mdx_core::workspace::{self, Children, FileNode, NodeKind, TreeFilters};
 
+use super::zoom;
 use super::{App, CliTarget, DiskState, DocumentId, Message, SyncScroll, strings};
 use crate::{editor, layout};
 
@@ -22,6 +23,8 @@ pub struct SessionSignature {
     recent_folders: Vec<PathBuf>,
     recent_files: Vec<PathBuf>,
     expanded: Vec<PathBuf>,
+    /// Zoom en milésimas (comparable sin `f32`).
+    zoom_milli: u32,
 }
 
 /// `true` si ya pasó el retraso de autoguardado desde el último cambio.
@@ -127,6 +130,9 @@ impl App {
             self.set_status(strings::CONFIG_APPLIED.to_owned(), false);
         }
 
+        // Zoom: el de la configuración (una recarga descarta el que se eligió con el teclado).
+        self.zoom = self.config_zoom();
+
         // Editor.
         self.editor_font = editor::resolve_font(&self.config.editor.font_family);
 
@@ -201,6 +207,10 @@ impl App {
             unusable,
         } = boot;
         self.sess.data = session;
+        // El zoom elegido la última vez prevalece sobre el de `config.toml`.
+        if let Some(zoom) = self.sess.data.zoom {
+            self.zoom = zoom.clamp(zoom::MIN_ZOOM, zoom::MAX_ZOOM);
+        }
         self.sess.ready = true;
         let mut tasks = Vec::new();
         if unusable {
@@ -290,6 +300,7 @@ impl App {
         }
         expanded.truncate(200);
         session.expanded_dirs = expanded;
+        session.zoom = Some(self.zoom);
         if let Some((explorer, inner)) = layout::current_ratios(&self.panes) {
             let inner = inner.unwrap_or_else(|| session.layout.inner_editor_ratio());
             session.layout = Layout::from_pane_ratios(explorer, inner);
@@ -320,6 +331,8 @@ impl App {
             recent_folders: self.sess.data.recent.folders.clone(),
             recent_files: self.sess.data.recent.files.clone(),
             expanded,
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            zoom_milli: (self.zoom * 1000.0).round() as u32,
         }
     }
 

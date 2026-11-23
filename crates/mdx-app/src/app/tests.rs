@@ -2181,3 +2181,105 @@ fn an_invalid_theme_value_falls_back_to_the_system_default() {
     let _ = app.update(Message::ConfigReloaded(LoadedConfig::default()));
     assert_eq!(app.theme(), Theme::Dark);
 }
+
+// ------------------------------------------------------------- US-4.5: zoom
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn percent(zoom: f32) -> u32 {
+    (zoom * 100.0).round() as u32
+}
+
+fn zoom_percent(app: &App) -> u32 {
+    percent(app.zoom)
+}
+
+#[test]
+fn zoom_in_and_out_change_the_factor_in_tenths() {
+    // AC1
+    let (mut app, _) = App::new(None);
+    assert_eq!(zoom_percent(&app), 100);
+    let _ = app.update(Message::Shortcut(ShortcutAction::ZoomIn));
+    let _ = app.update(Message::Shortcut(ShortcutAction::ZoomIn));
+    assert_eq!(zoom_percent(&app), 120);
+    assert_eq!(
+        app.status.as_ref().map(|s| s.text.as_str()),
+        Some("Zoom: 120 %")
+    );
+    let _ = app.update(Message::Shortcut(ShortcutAction::ZoomOut));
+    assert_eq!(zoom_percent(&app), 110);
+}
+
+#[test]
+fn zoom_stops_at_the_limits() {
+    let (mut app, _) = App::new(None);
+    for _ in 0..40 {
+        let _ = app.update(Message::Shortcut(ShortcutAction::ZoomIn));
+    }
+    assert_eq!(zoom_percent(&app), 300);
+    for _ in 0..60 {
+        let _ = app.update(Message::Shortcut(ShortcutAction::ZoomOut));
+    }
+    assert_eq!(zoom_percent(&app), 50);
+}
+
+#[test]
+fn zoom_reset_returns_to_the_configured_zoom() {
+    // AC1: Ctrl/Cmd+0.
+    let (mut app, _) = App::new(None);
+    let _ = app.update(Message::ConfigLoaded(loaded("[appearance]\nzoom = 1.5\n")));
+    assert_eq!(
+        zoom_percent(&app),
+        150,
+        "el zoom inicial es el de config.toml"
+    );
+    let _ = app.update(Message::Shortcut(ShortcutAction::ZoomIn));
+    let _ = app.update(Message::Shortcut(ShortcutAction::ZoomReset));
+    assert_eq!(zoom_percent(&app), 150);
+    let _ = app.update(Message::ConfigLoaded(LoadedConfig::default()));
+    let _ = app.update(Message::Shortcut(ShortcutAction::ZoomIn));
+    let _ = app.update(Message::Shortcut(ShortcutAction::ZoomReset));
+    assert_eq!(zoom_percent(&app), 100);
+}
+
+#[test]
+fn reloading_the_config_discards_the_keyboard_zoom() {
+    let (mut app, _) = App::new(None);
+    let _ = app.update(Message::Shortcut(ShortcutAction::ZoomIn));
+    let _ = app.update(Message::ConfigReloaded(loaded(
+        "[appearance]\nzoom = 2.0\n",
+    )));
+    assert_eq!(zoom_percent(&app), 200);
+}
+
+#[test]
+fn the_zoom_is_saved_with_the_session_and_restored_over_the_config_value() {
+    let (mut app, _) = App::new(None);
+    let _ = app.update(Message::ConfigLoaded(loaded("[appearance]\nzoom = 1.5\n")));
+    let _ = app.update(Message::Shortcut(ShortcutAction::ZoomIn));
+    assert_eq!(app.session_snapshot().zoom.map(percent), Some(160));
+    // Cambiar el zoom cuenta como cambio de sesión (se guarda en segundo plano).
+    let before = app.session_signature();
+    let _ = app.update(Message::Shortcut(ShortcutAction::ZoomIn));
+    assert_ne!(app.session_signature(), before);
+    // Al arrancar de nuevo, la sesión prevalece sobre la configuración.
+    let (mut next, _) = App::new(None);
+    let _ = next.update(Message::ConfigLoaded(loaded("[appearance]\nzoom = 1.5\n")));
+    let session = Session {
+        zoom: Some(2.2),
+        ..Session::default()
+    };
+    let _ = next.update(Message::SessionBooted(Box::new(Boot {
+        session,
+        ..Boot::default()
+    })));
+    assert_eq!(zoom_percent(&next), 220);
+}
+
+#[test]
+fn zoom_changes_do_not_touch_the_document() {
+    let (mut app, _) = App::new(None);
+    open_with(&mut app, "texto");
+    let _ = app.update(Message::Shortcut(ShortcutAction::ZoomIn));
+    assert_eq!(app.content.text(), "texto");
+    assert_eq!(app.title(), "a.md — Mdx");
+}
