@@ -1,5 +1,6 @@
 use super::*;
 use iced::widget::text_editor::{Action, Edit};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 fn type_char(app: &mut App, c: char) {
     let _ = app.update(Message::Edit(Action::Edit(Edit::Insert(c))));
@@ -1203,4 +1204,297 @@ fn parsed_blocks_are_stored_per_document() {
     assert_eq!(app.blocks.len(), 1);
     let _ = app.update(Message::SelectTab(a));
     assert_eq!(app.blocks.len(), 2);
+}
+
+// ------------------------------------------------- US-3.4: buscar y reemplazar
+
+fn open_find_with(app: &mut App, text: &str, pattern: &str) {
+    open_with(app, text);
+    let _ = app.update(Message::Shortcut(ShortcutAction::Find));
+    let _ = app.update(Message::FindQueryChanged(pattern.to_owned()));
+}
+
+fn selected_text(app: &App) -> Option<String> {
+    app.content.selection()
+}
+
+#[test]
+fn find_shortcut_opens_the_bar_and_selects_the_first_match() {
+    // AC1
+    let (mut app, _) = App::new(None);
+    open_find_with(&mut app, "uno dos uno tres uno", "uno");
+    assert!(app.find.open && !app.find.replace_mode);
+    assert_eq!(app.find.matches.len(), 3);
+    assert_eq!(app.find.current, Some(0));
+    assert_eq!(selected_text(&app).as_deref(), Some("uno"));
+    assert_eq!(app.find.summary(), "1 de 3");
+}
+
+#[test]
+fn next_and_previous_wrap_around() {
+    let (mut app, _) = App::new(None);
+    open_find_with(&mut app, "a-a-a", "a");
+    let _ = app.update(Message::FindNext);
+    assert_eq!(app.find.current, Some(1));
+    let _ = app.update(Message::FindNext);
+    let _ = app.update(Message::FindNext);
+    assert_eq!(app.find.current, Some(0), "vuelve al principio");
+    let _ = app.update(Message::FindPrev);
+    assert_eq!(app.find.current, Some(2), "y hacia atrás al final");
+}
+
+#[test]
+fn options_change_the_matches() {
+    // AC2
+    let (mut app, _) = App::new(None);
+    open_find_with(&mut app, "Casa casa casas", "casa");
+    assert_eq!(app.find.matches.len(), 3);
+    let _ = app.update(Message::FindOptionToggled(FindOption::CaseSensitive));
+    assert_eq!(app.find.matches.len(), 2);
+    let _ = app.update(Message::FindOptionToggled(FindOption::WholeWord));
+    assert_eq!(app.find.matches.len(), 1);
+    let _ = app.update(Message::FindOptionToggled(FindOption::CaseSensitive));
+    let _ = app.update(Message::FindOptionToggled(FindOption::Regex));
+    let _ = app.update(Message::FindQueryChanged(r"cas\w".to_owned()));
+    // Con «palabra completa» todavía activa, `cas\w` solo encaja con «Casa» y «casa».
+    assert_eq!(app.find.matches.len(), 2);
+}
+
+#[test]
+fn invalid_regex_shows_an_error_and_no_matches() {
+    let (mut app, _) = App::new(None);
+    open_find_with(&mut app, "texto", "(x");
+    let _ = app.update(Message::FindOptionToggled(FindOption::Regex));
+    assert!(app.find.error.is_some());
+    assert_eq!(app.find.matches, Vec::<std::ops::Range<usize>>::new());
+    let _ = app.update(Message::FindQueryChanged("texto".to_owned()));
+    assert!(app.find.error.is_none());
+    assert_eq!(app.find.matches.len(), 1);
+}
+
+#[test]
+fn replace_one_replaces_the_current_match_and_moves_to_the_next() {
+    // AC1: reemplazar uno.
+    let (mut app, _) = App::new(None);
+    open_find_with(&mut app, "uno dos uno", "uno");
+    let _ = app.update(Message::Shortcut(ShortcutAction::Replace));
+    assert!(app.find.replace_mode);
+    let _ = app.update(Message::ReplaceChanged("1".to_owned()));
+    let _ = app.update(Message::ReplaceOne);
+    assert_eq!(app.content.text(), "1 dos uno");
+    assert_eq!(app.title(), "● a.md — Mdx");
+    assert_eq!(app.find.matches.len(), 1);
+    assert_eq!(
+        selected_text(&app).as_deref(),
+        Some("uno"),
+        "salta a la siguiente"
+    );
+    let _ = app.update(Message::ReplaceOne);
+    assert_eq!(app.content.text(), "1 dos 1");
+    assert_eq!(app.find.summary(), "Sin resultados");
+}
+
+#[test]
+fn replace_all_is_a_single_undo_step_and_reports_the_count() {
+    // AC1: reemplazar todos.
+    let (mut app, _) = App::new(None);
+    open_find_with(&mut app, "uno dos uno tres uno", "uno");
+    let _ = app.update(Message::Shortcut(ShortcutAction::Replace));
+    let _ = app.update(Message::ReplaceChanged("1".to_owned()));
+    let _ = app.update(Message::ReplaceAll);
+    assert_eq!(app.content.text(), "1 dos 1 tres 1");
+    assert_eq!(app.find.notice.as_deref(), Some("3 reemplazos"));
+    let _ = app.update(Message::Shortcut(ShortcutAction::Undo));
+    assert_eq!(
+        app.content.text(),
+        "uno dos uno tres uno",
+        "un solo deshacer lo revierte"
+    );
+}
+
+#[test]
+fn regex_replacement_expands_capture_groups() {
+    let (mut app, _) = App::new(None);
+    open_find_with(&mut app, "ana@casa luis@mar", r"(\w+)@(\w+)");
+    let _ = app.update(Message::FindOptionToggled(FindOption::Regex));
+    let _ = app.update(Message::Shortcut(ShortcutAction::Replace));
+    let _ = app.update(Message::ReplaceChanged("$2:$1".to_owned()));
+    let _ = app.update(Message::ReplaceAll);
+    assert_eq!(app.content.text(), "casa:ana mar:luis");
+}
+
+#[test]
+fn replacing_with_an_empty_string_deletes_the_matches() {
+    let (mut app, _) = App::new(None);
+    open_find_with(&mut app, "a-b-a", "a");
+    let _ = app.update(Message::Shortcut(ShortcutAction::Replace));
+    let _ = app.update(Message::ReplaceAll);
+    assert_eq!(app.content.text(), "-b-");
+}
+
+#[test]
+fn matches_follow_the_text_while_the_bar_is_open() {
+    let (mut app, _) = App::new(None);
+    open_find_with(&mut app, "uno", "uno");
+    assert_eq!(app.find.matches.len(), 1);
+    // El primer «uno» quedó seleccionado: se lleva el cursor al final antes de escribir.
+    let _ = app.update(Message::Edit(Action::Move(
+        text_editor::Motion::DocumentEnd,
+    )));
+    type_text(&mut app, " uno");
+    assert_eq!(app.find.matches.len(), 2);
+}
+
+#[test]
+fn escape_closes_the_bar_and_the_find_shortcut_prefills_from_the_selection() {
+    let (mut app, _) = App::new(None);
+    open_find_with(&mut app, "uno dos", "uno");
+    let _ = app.update(Message::EscapePressed);
+    assert!(!app.find.open);
+    assert_eq!(app.find.matches, Vec::<std::ops::Range<usize>>::new());
+    // Con «dos» seleccionado, Ctrl+F lo usa como patrón.
+    app.content.move_to(text_editor::Cursor {
+        position: text_editor::Position { line: 0, column: 7 },
+        selection: Some(text_editor::Position { line: 0, column: 4 }),
+    });
+    let _ = app.update(Message::Shortcut(ShortcutAction::Find));
+    assert_eq!(app.find.query.pattern, "dos");
+}
+
+#[test]
+fn find_matches_are_recomputed_per_tab() {
+    let (mut app, _) = App::new(None);
+    let a = open_pinned_doc(&mut app, "a.md", "x x x");
+    let _ = app.update(Message::Shortcut(ShortcutAction::Find));
+    let _ = app.update(Message::FindQueryChanged("x".to_owned()));
+    assert_eq!(app.find.matches.len(), 3);
+    let _ = open_pinned_doc(&mut app, "b.md", "x");
+    assert_eq!(
+        app.find.matches.len(),
+        1,
+        "se recalculan con el documento nuevo"
+    );
+    let _ = app.update(Message::SelectTab(a));
+    assert_eq!(app.find.matches.len(), 3);
+}
+
+fn ws_with_files() -> (tempfile::TempDir, Workspace) {
+    let dir = tempfile::TempDir::new().unwrap();
+    std::fs::write(dir.path().join("a.md"), "uno\ntema aquí\n").unwrap();
+    std::fs::write(dir.path().join("b.md"), "tema\n").unwrap();
+    let ws = Workspace::open(dir.path(), TreeFilters::default()).unwrap();
+    (dir, ws)
+}
+
+#[test]
+fn workspace_search_shortcut_shows_the_search_panel() {
+    // AC3
+    let (mut app, _) = App::new(None);
+    let _ = app.update(Message::Shortcut(ShortcutAction::FindInWorkspace));
+    assert_eq!(app.sidebar, Sidebar::Search);
+}
+
+#[test]
+fn workspace_search_needs_an_open_folder_and_ignores_empty_queries() {
+    let (mut app, _) = App::new(None);
+    let _ = app.update(Message::WsQueryChanged("tema".to_owned()));
+    let _ = app.update(Message::WsSearch);
+    assert!(!app.ws_search.running, "sin carpeta no hay nada que buscar");
+    let (_dir, ws) = ws_with_files();
+    let _ = app.update(Message::WorkspaceOpened(Ok(ws)));
+    let _ = app.update(Message::WsQueryChanged(String::new()));
+    let _ = app.update(Message::WsSearch);
+    assert!(!app.ws_search.running);
+}
+
+#[test]
+fn workspace_search_runs_stores_results_and_discards_stale_ones() {
+    let (mut app, _) = App::new(None);
+    let (dir, ws) = ws_with_files();
+    let root = ws.root.clone();
+    let _ = app.update(Message::WorkspaceOpened(Ok(ws)));
+    let _ = app.update(Message::WsQueryChanged("tema".to_owned()));
+    let _ = app.update(Message::WsSearch);
+    assert!(app.ws_search.running);
+    let first_gen = app.ws_search.generation;
+    // Una segunda búsqueda cancela la primera.
+    let first_cancel = app.ws_search.cancel.clone().unwrap();
+    let _ = app.update(Message::WsSearch);
+    assert!(first_cancel.load(Ordering::Relaxed));
+    assert_eq!(app.ws_search.generation, first_gen + 1);
+
+    let found =
+        mdx_core::search::search_workspace(&root, &app.ws_search.query, &AtomicBool::new(false))
+            .unwrap();
+    let _ = app.update(Message::WsDone(first_gen, Ok(found.clone())));
+    assert!(
+        app.ws_search.result.is_none(),
+        "la respuesta vieja se descarta"
+    );
+    let _ = app.update(Message::WsDone(app.ws_search.generation, Ok(found)));
+    assert!(!app.ws_search.running);
+    let result = app.ws_search.result.as_ref().unwrap();
+    assert_eq!(result.matches.len(), 2);
+    assert_eq!(
+        crate::search::result_summary(result),
+        "2 resultados en 2 archivos"
+    );
+    drop(dir);
+}
+
+#[test]
+fn cancelling_a_workspace_search_raises_the_flag() {
+    // AC3: cancelable.
+    let (mut app, _) = App::new(None);
+    let (_dir, ws) = ws_with_files();
+    let _ = app.update(Message::WorkspaceOpened(Ok(ws)));
+    let _ = app.update(Message::WsQueryChanged("tema".to_owned()));
+    let _ = app.update(Message::WsSearch);
+    let flag = app.ws_search.cancel.clone().unwrap();
+    let _ = app.update(Message::WsCancel);
+    assert!(flag.load(Ordering::Relaxed));
+}
+
+#[test]
+fn clicking_a_result_in_an_open_file_selects_the_match() {
+    // AC3: clic abre y posiciona.
+    let (mut app, _) = App::new(None);
+    let path = open_with(&mut app, "uno\ntema aquí\nfin");
+    let _ = app.update(Message::OpenResult(path, 1, 0..4));
+    assert_eq!(selected_text(&app).as_deref(), Some("tema"));
+    assert_eq!(editor::cursor_pos(&app.content), (1, 4));
+}
+
+#[test]
+fn clicking_a_result_in_a_closed_file_opens_it_then_selects_the_match() {
+    let (mut app, _) = App::new(None);
+    let path = PathBuf::from("/proyecto/otro.md");
+    let _ = app.update(Message::OpenResult(path.clone(), 1, 3..7));
+    assert!(app.pending_goto.is_some());
+    let doc = Document::from_bytes(&path, "uno\nxx tema yy".as_bytes(), None).unwrap();
+    let _ = app.update(Message::DocumentLoaded(Ok(doc)));
+    assert!(app.pending_goto.is_none());
+    assert_eq!(app.doc.path.as_deref(), Some(path.as_path()));
+    assert_eq!(selected_text(&app).as_deref(), Some("tema"));
+}
+
+#[test]
+fn a_stale_pending_position_is_dropped_when_another_file_opens_or_loading_fails() {
+    let (mut app, _) = App::new(None);
+    let _ = app.update(Message::OpenResult(
+        PathBuf::from("/proyecto/x.md"),
+        3,
+        0..1,
+    ));
+    let _ = app.update(Message::DocumentLoaded(Err(CoreError::NotFound(
+        PathBuf::from("/proyecto/x.md"),
+    ))));
+    assert!(app.pending_goto.is_none());
+    // Coordenadas fuera de rango no provocan pánico (documento más corto que el resultado).
+    let path = open_with(&mut app, "corto");
+    let _ = app.update(Message::OpenResult(path, 99, 50..60));
+    assert!(
+        editor::cursor_pos(&app.content).0 == 0,
+        "se acota a la última línea"
+    );
 }

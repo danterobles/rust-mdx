@@ -121,9 +121,9 @@
 - [x] AC2 Toggle 👁
 
 ### US-3.4 Buscar y reemplazar
-- [ ] AC1 Buscar / reemplazar en documento 🧪 + 👁
-- [ ] AC2 Opciones (mayúsculas, palabra, regex) 🧪
-- [ ] AC3 Búsqueda en workspace cancelable 🧪 + 👁
+- [x] AC1 Buscar / reemplazar en documento 🧪 + 👁
+- [x] AC2 Opciones (mayúsculas, palabra, regex) 🧪 — `search::tests::options_case_sensitive_whole_word_and_regex`, `invalid_regex_*`, `app::tests::options_change_the_matches`, `regex_replacement_expands_capture_groups`
+- [x] AC3 Búsqueda en workspace cancelable 🧪 + 👁
 
 ### US-3.5 Autoguardado y sesión
 - [ ] AC1 Autoguardado opcional 🧪

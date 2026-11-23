@@ -69,7 +69,7 @@ flowchart LR
 | `fileops` | `validate_name`, `create_file`, `create_dir`, `rename`, `move_to_trash`, `reveal`, `rebase_path` | Operaciones sobre archivos del usuario; eliminar = papelera (`trash`), nunca `remove_*` |
 | `link` | `classify(url, base_dir) -> LinkTarget` | Enlaces de la preview: externo, Markdown local o no soportado |
 | `outline` | `extract(text) -> Outline`, `top_level_blocks(text) -> Vec<Block>` | `pulldown-cmark` con `into_offset_iter` para obtener la línea |
-| `search` | `search_text(text, q)`, `search_workspace(root, q, cancel) -> Stream<SearchMatch>` | `regex`; cancelación con `CancellationToken` o `AtomicBool` |
+| `search` | `find_all`, `replace_all`, `replacement_for`, `search_workspace(root, q, &AtomicBool) -> WorkspaceSearch` (+ `_async`) | `regex`; recorrido con `ignore`; cancelación con `Arc<AtomicBool>`; máx. 5 000 resultados |
 | `export` | `to_html(text, theme) -> String` | `comrak` con GFM; CSS embebido |
 | `config` | `Config`, `load()`, `save()`, migraciones | `serde` + `toml`; valida y acota |
 | `session` | `Session`, `load()`, `save()` | Igual que config |
@@ -87,11 +87,13 @@ mdx-app/src/
 │   ├── disk.rs      # watcher, cambios externos, conflictos
 │   ├── explorer_ops.rs # árbol, menú contextual, operaciones de archivo
 │   ├── preview.rs   # vista previa, parseo en segundo plano y enlaces
+│   ├── search_ops.rs # buscar/reemplazar y búsqueda en carpeta
 │   └── sync.rs      # scroll sincronizado editor → vista previa
 ├── layout.rs        # disposición del pane_grid (20/40/40), lógica pura
 ├── editor.rs        # key_binding (Tab), aplicación de parches de historial
 ├── explorer.rs      # vista del árbol de archivos y menú de filtros
 ├── outline.rs       # panel «Esquema» (encabezados del documento activo)
+├── search.rs        # barra buscar/reemplazar y panel de búsqueda en carpeta
 ├── preview_sync.rs  # medición de bloques de la preview y mapeo línea → desplazamiento
 ├── statusbar.rs     # texto de la barra de estado (línea:col, palabras, EOL, codificación)
 ├── state/

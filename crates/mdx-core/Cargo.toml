@@ -14,6 +14,7 @@ ignore.workspace = true
 notify.workspace = true
 notify-debouncer-full.workspace = true
 pulldown-cmark.workspace = true
+regex.workspace = true
 thiserror.workspace = true
 trash.workspace = true
 tokio.workspace = true

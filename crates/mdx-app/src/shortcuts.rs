@@ -15,6 +15,12 @@ pub enum ShortcutAction {
     Redo,
     TogglePreview,
     CloseTab,
+    /// Buscar en el documento.
+    Find,
+    /// Buscar y reemplazar en el documento.
+    Replace,
+    /// Buscar en toda la carpeta.
+    FindInWorkspace,
     NextTab,
     PrevTab,
     /// Salta a la pestaña `n` (1..=9).
@@ -69,6 +75,16 @@ pub fn map(key: &Key, physical: Physical, modifiers: Modifiers) -> Option<Shortc
             ShortcutAction::NextTab
         });
     }
+    // En macOS Cmd+H es «ocultar la aplicación»: reemplazar es Cmd+Opt+F (PRD §10).
+    if cfg!(target_os = "macos")
+        && modifiers.command()
+        && modifiers.alt()
+        && !modifiers.shift()
+        // Con Opt, el carácter producido cambia (ƒ): se usa la tecla física.
+        && matches!(physical, Physical::Code(Code::KeyF))
+    {
+        return Some(ShortcutAction::Replace);
+    }
     if !modifiers.command() || modifiers.alt() {
         return None;
     }
@@ -85,6 +101,9 @@ pub fn map(key: &Key, physical: Physical, modifiers: Modifiers) -> Option<Shortc
         ('s', false) => Some(ShortcutAction::Save),
         ('s', true) => Some(ShortcutAction::SaveAs),
         ('w', false) => Some(ShortcutAction::CloseTab),
+        ('f', false) => Some(ShortcutAction::Find),
+        ('f', true) => Some(ShortcutAction::FindInWorkspace),
+        ('h', false) if !cfg!(target_os = "macos") => Some(ShortcutAction::Replace),
         ('z', false) => Some(ShortcutAction::Undo),
         ('z', true) => Some(ShortcutAction::Redo),
         // Ctrl+Y rehace en Windows/Linux (en macOS es Cmd+Shift+Z).
@@ -177,6 +196,26 @@ mod tests {
             map(&tab, Physical::Code(Code::Tab), Modifiers::empty()),
             None
         );
+    }
+
+    #[test]
+    fn maps_search_shortcuts() {
+        // AC1 / AC3
+        let cmd = Modifiers::COMMAND;
+        assert_eq!(press("f", Code::KeyF, cmd), Some(ShortcutAction::Find));
+        assert_eq!(
+            press("F", Code::KeyF, cmd | Modifiers::SHIFT),
+            Some(ShortcutAction::FindInWorkspace)
+        );
+        let replace = press("h", Code::KeyH, cmd);
+        let mac_replace = press("ƒ", Code::KeyF, cmd | Modifiers::ALT);
+        if cfg!(target_os = "macos") {
+            assert_eq!(replace, None, "Cmd+H es de macOS");
+            assert_eq!(mac_replace, Some(ShortcutAction::Replace));
+        } else {
+            assert_eq!(replace, Some(ShortcutAction::Replace));
+            assert_eq!(mac_replace, None);
+        }
     }
 
     #[test]

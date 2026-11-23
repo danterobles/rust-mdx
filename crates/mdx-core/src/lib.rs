@@ -13,6 +13,7 @@ pub mod history;
 pub mod io;
 pub mod link;
 pub mod outline;
+pub mod search;
 pub mod watcher;
 pub mod workspace;
 
