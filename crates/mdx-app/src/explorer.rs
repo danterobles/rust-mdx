@@ -7,6 +7,7 @@ use iced::widget::{
     Column, Id, Row, button, checkbox, container, mouse_area, scrollable, text, text_input,
 };
 use iced::{Element, Length, Theme};
+use mdx_core::session::Recent;
 use mdx_core::watcher::FsEvent;
 use mdx_core::workspace::{Children, FileNode, NodeKind, TreeFilters, VisibleNode, Workspace};
 
@@ -211,9 +212,13 @@ impl Ctx<'_> {
 
 /// Árbol completo del explorador, con el menú de filtros (clic derecho en el panel).
 /// `active` es el archivo abierto en el editor (se resalta, US-2.2 AC3).
-pub fn view<'a>(state: &'a ExplorerState, active: Option<&'a Path>) -> Element<'a, Message> {
+pub fn view<'a>(
+    state: &'a ExplorerState,
+    active: Option<&'a Path>,
+    recent: &'a Recent,
+) -> Element<'a, Message> {
     let body: Element<'a, Message> = match &state.workspace {
-        None => text(strings::EXPLORER_EMPTY).into(),
+        None => empty_state(recent),
         Some(ws) => {
             let ctx = Ctx {
                 selected: state.selected.as_deref(),
@@ -315,6 +320,48 @@ fn prompt_view(prompt: &Prompt) -> Element<'_, Message> {
         .padding(8)
         .style(container::bordered_box)
         .into()
+}
+
+/// Sin carpeta abierta: invitación a abrir una y listas de recientes (máx. 10 + 10).
+fn empty_state(recent: &Recent) -> Element<'_, Message> {
+    let mut column = Column::new().spacing(4).push(text(strings::EXPLORER_EMPTY));
+    if !recent.folders.is_empty() {
+        column = column.push(text(strings::RECENT_FOLDERS).size(14));
+        for folder in &recent.folders {
+            column = column.push(recent_entry(
+                folder,
+                Message::OpenRecentFolder(folder.clone()),
+            ));
+        }
+    }
+    if !recent.files.is_empty() {
+        column = column.push(text(strings::RECENT_FILES).size(14));
+        for file in &recent.files {
+            column = column.push(recent_entry(file, Message::OpenRecentFile(file.clone())));
+        }
+    }
+    scrollable(column)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
+}
+
+fn recent_entry(path: &Path, message: Message) -> Element<'_, Message> {
+    let name = path.file_name().map_or_else(
+        || path.display().to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    iced::widget::tooltip(
+        button(text(name).size(13))
+            .padding(0)
+            .style(button::text)
+            .on_press(message),
+        container(text(path.display().to_string()).size(12))
+            .padding(4)
+            .style(container::bordered_box),
+        iced::widget::tooltip::Position::Bottom,
+    )
+    .into()
 }
 
 fn filter_menu<'a>(filters: TreeFilters) -> Element<'a, Message> {

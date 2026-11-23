@@ -232,3 +232,17 @@ Decisiones y límites:
 - Sin resaltado de **todas** las coincidencias en el texto (el `text_editor` de iced no permite pintar rangos arbitrarios): solo se selecciona la actual y la barra muestra el contador.
 - Reemplazar todo pega el texto completo en una operación (`Edit::Paste`): con documentos de varios MB puede tardar.
 - Verificación 👁 AC1 y AC3 confirmada manualmente por el propietario el 2026-11-23.
+
+## US-3.5 Autoguardado y sesión — 🟡 implementada, pendiente verificación 👁 (rama feat/us-3.5-autoguardado-sesion)
+Plan acordado con el propietario: `mdx-core::config` **mínimo** (solo `[files]`) ahora y completo en US-4.2; el autoguardado se activa editando `config.toml` a mano hasta que US-4.2 añada `Ctrl/Cmd+,`.
+Implementación: `mdx-core::{paths, config, session}`, `mdx-app/src/app/session_ops.rs`, `SessionState` en `App`, `layout::{current_ratios, apply_ratios}`, «Recientes» en `explorer.rs`.
+- AC1 🧪 off por defecto; `autosave_delay_ms` 500..=10000 (2000 por defecto, fuera de rango se acota con aviso). Un temporizador de 250 ms solo corre si hay documentos con ruta y cambios; guarda los que llevan ≥ retraso sin cambios, **incluidas pestañas en segundo plano**. Nunca guarda: sin título, limpios, con conflicto (`ChangedExternally`) ni borrados en disco (no pisa cambios externos ni resucita archivos), ni con un guardado en curso. Si falla, reinicia la espera (no reintenta en bucle) y muestra el error.
+- AC2 🧪 `session.toml` (DATA §4.2) en el directorio de estado del SO, escrito con `write_atomic`. Se guarda en segundo plano cuando cambia la carpeta, las pestañas/activa, las carpetas expandidas o los recientes (no en cada pulsación ni mientras se arrastra un divisor) y **siempre al cerrar** (`run(Close)` espera a que termine antes de salir). No se guarda hasta haber leído la sesión anterior.
+- AC3 🧪 sin argumento: restaura carpeta, pestañas en su orden (todas fijas), pestaña activa, carpetas expandidas (de fuera hacia dentro a medida que cargan) y proporciones de paneles. INV-5: lo que no existe o no se lee se omite sin error; `active_tab` se acota. Un `session.toml` corrupto o de esquema más nuevo se ignora con un aviso y **no se sobrescribe al arrancar** (sí al siguiente guardado normal).
+- AC4 🧪 Recientes: máx. 10 carpetas y 10 archivos, más reciente primero, sin duplicados, podados al arrancar; se muestran (con la ruta en tooltip) en el panel Archivos mientras no haya carpeta abierta.
+Prueba de extremo a extremo (manual, con `MDX_STATE_DIR`/`MDX_CONFIG_DIR` temporales): abrir un archivo por CLI escribe `session.toml` con pestañas y recientes; arrancar sin argumento reabre la sesión sin errores.
+Decisiones y puntos a revisar:
+- **Con argumento CLI no se restaura la sesión** (literal del AC3) y el siguiente guardado sustituye la lista de pestañas guardada por la nueva. Alternativa: restaurar también y añadir el archivo del argumento (más cercano a otros editores). Pendiente de decisión del propietario.
+- Directorios: macOS `~/Library/Application Support/mx.doitconsulting.mdx/`; Linux `~/.config/mdx/` y `~/.local/state/mdx/`; Windows `%APPDATA%\doitconsulting\mdx\config\`. Variables `MDX_CONFIG_DIR`/`MDX_STATE_DIR` para sustituirlos.
+- Los recientes no se muestran con una carpeta abierta (se llega a ellos al cerrar la carpeta); un menú «Recientes» global queda para más adelante si hace falta.
+- `clippy::assert_is_empty` permitido solo en los tests (`cfg_attr(test)`) de `mdx-core` y `mdx-app`.
