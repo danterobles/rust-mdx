@@ -10,6 +10,8 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-23
+
 ### Added
 - Cambios externos: el explorador refleja altas, bajas y renombrados; el archivo abierto se recarga solo si no tiene cambios, muestra el aviso «El archivo cambió en disco» con Recargar / Conservar mío si los tiene, y se marca «(eliminado)» conservando el contenido si se borra [US-2.4]
 - Operaciones de archivo desde el explorador (clic derecho): nuevo archivo, nueva carpeta, renombrar, eliminar (a la papelera, con confirmación) y revelar en el sistema; los nombres inválidos o repetidos muestran el error en línea [US-2.3]
@@ -35,5 +37,6 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 - Ventana principal «Mdx» con explorador, editor y vista previa (20/40/40), divisores arrastrables y barra de estado [US-0.2]
 - Especificación inicial: PRD, DATA, ARCHITECTURE, STACK, CHECKLIST y CLAUDE.md.
 
-[Unreleased]: https://github.com/OWNER/mdx/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/OWNER/mdx/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/OWNER/mdx/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/OWNER/mdx/releases/tag/v0.2.0

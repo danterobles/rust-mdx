@@ -168,3 +168,10 @@ Decisiones:
 - Si el observador no puede iniciarse se informa en la barra de estado.
 - Solo probado en macOS (FSEvents). Linux (inotify) y Windows quedan para el QA de F5 / CI.
 - Verificación 👁 AC3 y AC4 confirmada manualmente por el propietario el 2026-11-23.
+
+## Cierre de F2 → v0.3.0 (2026-11-23)
+- Historias F2: US-2.1, US-2.2, US-2.3 y US-2.4 completas (AC verificados).
+- Hito F2 verificado manualmente por el propietario (navegar y editar el repo; cambio externo manejado).
+- F2 no exige NFR de cierre (la tabla de NFR se mide en F1, F3 y F5).
+- Siguen abiertos: Hito F1 y comprobaciones 👁 de NFR-2/3/4 (F1); CI remoto (AC2 de US-0.1); licencia y URL del repositorio en `TBD`. Watcher, papelera y «revelar» solo probados en macOS.
+- Tag `v0.3.0` y `v0.2.0`: **no creados**; requieren autorización explícita.

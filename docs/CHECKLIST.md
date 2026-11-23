@@ -102,7 +102,7 @@
 - [x] AC4 Pestaña "(eliminado)" 🧪 + 👁 — `app::tests::deleted_on_disk_is_marked_and_keeps_content_and_can_be_resaved` (marcador en el título de la ventana; la barra de pestañas llega en US-3.1)
 - [x] AC5 Guardado propio no dispara banner 🧪 (INV-3) — `app::tests::own_save_never_triggers_the_banner`
 
-- [ ] **Hito F2**: navegar y editar el repo; cambio externo manejado 👁
+- [x] **Hito F2**: navegar y editar el repo; cambio externo manejado 👁 (verificado por el propietario el 2026-11-23)
 
 ## Fase 3 — Productividad → v0.4.0
 
