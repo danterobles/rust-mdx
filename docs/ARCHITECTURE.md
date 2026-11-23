@@ -62,7 +62,7 @@ flowchart LR
 | Módulo | Expone | Notas |
 |---|---|---|
 | `document` | `Document`, `LineEnding`, `DiskState`, `DocumentId` | Puro, sin I/O |
-| `io` | `read_document(path)`, `write_atomic(path, bytes)` | Async (`tokio::fs`); temp en mismo dir + `rename` + `fsync` |
+| `io` | `read_document(path)`, `write_atomic(path, bytes)`, `save_text(path, text, line_ending, has_bom) -> SavedInfo` | Async (`tokio::fs`); temp en mismo dir + `rename` + `fsync` |
 | `workspace` | `Workspace`, `FileNode`, `load_children(dir, filters)`, operaciones (crear, renombrar, papelera) | Usa `ignore::WalkBuilder` con `max_depth(1)` para carga perezosa |
 | `watcher` | `watch(root) -> impl Stream<Item = FsEvent>` | `notify-debouncer-full`, 200 ms; filtra por `TreeFilters` |
 | `outline` | `extract(text) -> Outline` | `pulldown-cmark` con `into_offset_iter` para obtener la línea |

@@ -3,6 +3,15 @@
 //! Este crate nunca depende de `iced`.
 
 #![deny(clippy::unwrap_used, clippy::expect_used)]
+// NFR-5 aplica al código de producción; los tests pueden usar unwrap.
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
+
+pub mod document;
+pub mod error;
+pub mod io;
+
+pub use document::{DiskState, Document, DocumentId, LineEnding};
+pub use error::CoreError;
 
 /// Devuelve la versión del workspace (única fuente: `[workspace.package]`).
 #[must_use]
