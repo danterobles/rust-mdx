@@ -16,14 +16,18 @@ use mdx_core::workspace::{self, FileNode, TreeFilters, Workspace};
 use mdx_core::{CoreError, Document};
 
 use crate::editor;
-use crate::explorer::{self, ExplorerState};
+use crate::explorer::{self, ExplorerKey, ExplorerState, Nav};
 use crate::layout::{PaneKind, initial_panes, panes_without_preview};
 use crate::shortcuts::{self, ShortcutAction};
+use crate::state::tabs::Tabs;
 use crate::statusbar::{Stats, display_col};
 use crate::strings;
 
 pub struct App {
     explorer: ExplorerState,
+    tabs: Tabs,
+    /// Ruta cuyo doble clic (o apertura explícita) llegó mientras se cargaba: queda fijada.
+    pin_on_load: Option<PathBuf>,
     panes: pane_grid::State<PaneKind>,
     doc: Document,
     content: text_editor::Content,
@@ -100,6 +104,9 @@ pub enum Message {
     ToggleDir(PathBuf),
     DirLoaded(PathBuf, Result<Vec<FileNode>, CoreError>),
     ToggleExplorerMenu,
+    FileClicked(PathBuf),
+    FilePinned(PathBuf),
+    ExplorerKey(ExplorerKey),
     ToggleFilter(FilterKind),
     PreviewParsed(u64, Vec<markdown::Item>),
     LinkClicked(String),
@@ -111,15 +118,23 @@ impl App {
     /// abre como workspace y un archivo se abre en el editor.
     pub fn new(arg: Option<PathBuf>) -> (Self, Task<Message>) {
         let filters = TreeFilters::default();
+        let doc = Document::untitled();
+        let mut tabs = Tabs::new();
+        tabs.open_pinned(doc.id);
+        let mut pin_on_load = None;
         let boot = match arg {
             Some(path) if path.is_dir() => Task::perform(
                 workspace::open_async(path, filters),
                 Message::WorkspaceOpened,
             ),
-            Some(path) => Task::perform(
-                async move { mdx_core::io::read_document(&path).await },
-                Message::DocumentLoaded,
-            ),
+            Some(path) => {
+                // Apertura explícita por CLI: la pestaña queda fijada.
+                pin_on_load = Some(path.clone());
+                Task::perform(
+                    async move { mdx_core::io::read_document(&path).await },
+                    Message::DocumentLoaded,
+                )
+            }
             None => Task::none(),
         };
         (
@@ -128,9 +143,12 @@ impl App {
                     workspace: None,
                     filters,
                     menu_open: false,
+                    selected: None,
                 },
+                tabs,
+                pin_on_load,
                 panes: initial_panes(),
-                doc: Document::untitled(),
+                doc,
                 content: text_editor::Content::new(),
                 status: None,
                 dirty: false,
@@ -165,13 +183,22 @@ impl App {
     #[allow(clippy::unused_self)]
     pub fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
-            event::listen_with(|event, _status, _window| match event {
+            event::listen_with(|event, status, _window| match event {
                 Event::Keyboard(keyboard::Event::KeyPressed {
                     key,
                     physical_key,
                     modifiers,
                     ..
-                }) => shortcuts::map(&key, physical_key, modifiers).map(Message::Shortcut),
+                }) => shortcuts::map(&key, physical_key, modifiers)
+                    .map(Message::Shortcut)
+                    .or_else(|| {
+                        // Solo teclas que ningún widget (p. ej. el editor enfocado) consumió.
+                        if status == event::Status::Ignored {
+                            explorer::map_key(&key, modifiers).map(Message::ExplorerKey)
+                        } else {
+                            None
+                        }
+                    }),
                 _ => None,
             }),
             window::close_requests().map(|_| Message::CloseRequested),
@@ -196,10 +223,13 @@ impl App {
                 Task::none()
             }
             Message::Shortcut(action) => self.handle_shortcut(action),
-            Message::FilePicked(Some(path)) => Task::perform(
-                async move { mdx_core::io::read_document(&path).await },
-                Message::DocumentLoaded,
-            ),
+            Message::FilePicked(Some(path)) => {
+                self.pin_on_load = Some(path.clone());
+                Task::perform(
+                    async move { mdx_core::io::read_document(&path).await },
+                    Message::DocumentLoaded,
+                )
+            }
             Message::FilePicked(None) | Message::FolderPicked(None) => Task::none(),
             Message::DocumentLoaded(result) => self.handle_loaded(result),
             Message::SavePicked(Some(path)) => self.save_to(path),
@@ -232,6 +262,7 @@ impl App {
                     Ok(ws) => {
                         let msg = format!("{}: {}", strings::STATUS_FOLDER_OPENED, ws.tree.name);
                         self.explorer.workspace = Some(ws);
+                        self.explorer.selected = None;
                         self.set_status(msg, false);
                     }
                     Err(err) => self.set_status(err.to_string(), true),
@@ -245,6 +276,9 @@ impl App {
                 }
                 Task::none()
             }
+            Message::FileClicked(path) => self.open_from_explorer(path, false),
+            Message::FilePinned(path) => self.open_from_explorer(path, true),
+            Message::ExplorerKey(key) => self.explorer_key(key),
             Message::ToggleExplorerMenu => {
                 self.explorer.menu_open = !self.explorer.menu_open;
                 Task::none()
@@ -309,7 +343,9 @@ impl App {
         match action {
             PendingAction::Close => iced::exit(),
             PendingAction::New => {
+                self.tabs.close(self.doc.id);
                 self.doc = Document::untitled();
+                self.tabs.open_pinned(self.doc.id);
                 self.content = text_editor::Content::new();
                 let task = self.reset_editing_state();
                 self.set_status(strings::STATUS_NEW.to_owned(), false);
@@ -390,6 +426,54 @@ impl App {
             },
             move |items| Message::PreviewParsed(generation, items),
         )
+    }
+
+    /// Clic simple (preview) o doble clic (fija) sobre un archivo del árbol.
+    fn open_from_explorer(&mut self, path: PathBuf, pin: bool) -> Task<Message> {
+        self.explorer.selected = Some(path.clone());
+        if self.doc.path.as_deref() == Some(path.as_path()) {
+            // Ya está abierto: solo se fija si fue doble clic.
+            if pin {
+                self.tabs.pin(self.doc.id);
+            }
+            return Task::none();
+        }
+        if pin {
+            self.pin_on_load = Some(path.clone());
+        }
+        self.request(PendingAction::OpenPath(path))
+    }
+
+    fn explorer_key(&mut self, key: ExplorerKey) -> Task<Message> {
+        let Some(ws) = &self.explorer.workspace else {
+            return Task::none();
+        };
+        let nav = explorer::navigate(&ws.visible_nodes(), self.explorer.selected.as_deref(), key);
+        match nav {
+            Nav::None => Task::none(),
+            Nav::Select(path) => {
+                self.explorer.selected = Some(path);
+                Task::none()
+            }
+            Nav::Toggle(path) => self.toggle_dir(&path),
+            Nav::Open(path) => self.open_from_explorer(path, false),
+        }
+    }
+
+    /// Registra el documento recién abierto en el modelo de pestañas (INV-7).
+    fn track_tab(&mut self, doc: &Document) {
+        // Con un solo documento en memoria, abrir otro siempre reemplaza al actual; las pestañas
+        // visibles y los varios documentos abiertos llegan con US-3.1.
+        self.tabs.close(self.doc.id);
+        let pin = self
+            .pin_on_load
+            .take()
+            .is_some_and(|p| doc.path.as_deref() == Some(p.as_path()));
+        if pin {
+            self.tabs.open_pinned(doc.id);
+        } else {
+            self.tabs.open_preview(doc.id);
+        }
     }
 
     fn toggle_dir(&mut self, path: &Path) -> Task<Message> {
@@ -497,6 +581,7 @@ impl App {
             Ok(doc) => {
                 self.content = text_editor::Content::with_text(&doc.text);
                 let name = doc.display_name(strings::UNTITLED);
+                self.track_tab(&doc);
                 self.doc = doc;
                 let task = self.reset_editing_state();
                 self.set_status(format!("{}: {name}", strings::STATUS_OPENED), false);
@@ -556,11 +641,7 @@ impl App {
         let theme = self.theme();
         let grid = pane_grid(&self.panes, |_, kind, _| {
             let body: Element<'_, Message> = match kind {
-                PaneKind::Explorer => explorer::view(
-                    self.explorer.workspace.as_ref(),
-                    self.explorer.filters,
-                    self.explorer.menu_open,
-                ),
+                PaneKind::Explorer => explorer::view(&self.explorer, self.doc.path.as_deref()),
                 PaneKind::Editor => text_editor(&self.content)
                     .on_action(Message::Edit)
                     .key_binding(editor::key_binding)
@@ -978,6 +1059,96 @@ mod tests {
         ))));
         assert!(app.explorer.workspace.is_none());
         assert!(app.status.as_ref().is_some_and(|s| s.is_error));
+    }
+
+    fn load(app: &mut App, name: &str) -> PathBuf {
+        let path = PathBuf::from(format!("/proyecto/{name}"));
+        let doc = Document::from_bytes(&path, b"# x", None).unwrap();
+        let _ = app.update(Message::DocumentLoaded(Ok(doc)));
+        path
+    }
+
+    fn unpinned_tabs(app: &App) -> usize {
+        app.tabs.tabs().iter().filter(|t| !t.pinned).count()
+    }
+
+    #[test]
+    fn single_clicks_reuse_one_preview_tab() {
+        // AC1 (INV-7): clic simple sobre archivos distintos nunca acumula pestañas preview.
+        let (mut app, _) = App::new(None);
+        for name in ["a.md", "b.md", "c.md"] {
+            let path = PathBuf::from(format!("/proyecto/{name}"));
+            let _ = app.update(Message::FileClicked(path));
+            load(&mut app, name);
+        }
+        assert_eq!(unpinned_tabs(&app), 1);
+        assert_eq!(app.tabs.tabs().len(), 1);
+        assert_eq!(app.doc.path.as_deref(), Some(Path::new("/proyecto/c.md")));
+        assert_eq!(
+            app.explorer.selected.as_deref(),
+            Some(Path::new("/proyecto/c.md"))
+        );
+    }
+
+    #[test]
+    fn double_click_pins_the_opened_file() {
+        // AC1: el doble clic llega con el archivo aún cargándose.
+        let (mut app, _) = App::new(None);
+        let path = PathBuf::from("/proyecto/a.md");
+        let _ = app.update(Message::FileClicked(path.clone()));
+        let _ = app.update(Message::FilePinned(path));
+        load(&mut app, "a.md");
+        assert_eq!(unpinned_tabs(&app), 0);
+        assert!(app.tabs.is_pinned(app.doc.id));
+    }
+
+    #[test]
+    fn double_click_on_open_preview_pins_it_without_reloading() {
+        let (mut app, _) = App::new(None);
+        let path = load(&mut app, "a.md");
+        assert_eq!(unpinned_tabs(&app), 1);
+        let id = app.doc.id;
+        let _ = app.update(Message::FilePinned(path));
+        assert!(app.tabs.is_pinned(id));
+        assert_eq!(app.doc.id, id, "no se recarga el documento");
+    }
+
+    #[test]
+    fn clicking_a_file_with_unsaved_changes_does_not_discard_them() {
+        let (mut app, _) = App::new(None);
+        type_char(&mut app, 'a');
+        let _ = app.update(Message::FileClicked(PathBuf::from("/proyecto/b.md")));
+        assert_eq!(
+            app.content.text(),
+            "a",
+            "debe preguntar antes de reemplazar"
+        );
+    }
+
+    #[test]
+    fn keyboard_navigation_moves_selection_and_toggles() {
+        // AC2
+        let (_dir, ws) = temp_workspace();
+        let sub = ws.root.join("sub");
+        let (mut app, _) = App::new(None);
+        let _ = app.update(Message::WorkspaceOpened(Ok(ws)));
+        let _ = app.update(Message::ExplorerKey(ExplorerKey::Down));
+        assert_eq!(app.explorer.selected.as_deref(), Some(sub.as_path()));
+        let _ = app.update(Message::ExplorerKey(ExplorerKey::Right));
+        let expanded = |app: &App| {
+            matches!(
+                app.explorer
+                    .workspace
+                    .as_ref()
+                    .unwrap()
+                    .node(&sub)
+                    .map(|n| &n.kind),
+                Some(mdx_core::workspace::NodeKind::Dir { expanded: true, .. })
+            )
+        };
+        assert!(expanded(&app));
+        let _ = app.update(Message::ExplorerKey(ExplorerKey::Left));
+        assert!(!expanded(&app));
     }
 
     #[test]

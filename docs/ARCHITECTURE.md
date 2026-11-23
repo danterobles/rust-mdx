@@ -85,7 +85,7 @@ mdx-app/src/
 ├── explorer.rs      # vista del árbol de archivos y menú de filtros
 ├── statusbar.rs     # texto de la barra de estado (línea:col, palabras, EOL, codificación)
 ├── state/
-│   ├── tabs.rs      # lógica pura de pestañas (testeable)
+│   ├── tabs.rs      # lógica pura de pestañas (testeable); en US-2.2 solo el modelo
 │   └── editors.rs   # HashMap<DocumentId, text_editor::Content>
 ├── views/
 │   ├── explorer.rs  ├── tabs.rs     ├── editor.rs

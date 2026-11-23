@@ -187,6 +187,47 @@ impl Workspace {
     }
 }
 
+/// Fila visible del árbol (para navegación por teclado).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VisibleNode {
+    pub path: PathBuf,
+    pub depth: usize,
+    pub is_dir: bool,
+    pub expanded: bool,
+}
+
+impl Workspace {
+    /// Filas visibles en orden de pantalla: los hijos de carpetas expandidas y cargadas.
+    /// La raíz no se incluye.
+    #[must_use]
+    pub fn visible_nodes(&self) -> Vec<VisibleNode> {
+        fn walk(node: &FileNode, depth: usize, out: &mut Vec<VisibleNode>) {
+            if let NodeKind::Dir {
+                children: Children::Loaded(kids),
+                expanded: true,
+            } = &node.kind
+            {
+                for kid in kids {
+                    let (is_dir, expanded) = match &kid.kind {
+                        NodeKind::Dir { expanded, .. } => (true, *expanded),
+                        NodeKind::File { .. } => (false, false),
+                    };
+                    out.push(VisibleNode {
+                        path: kid.path.clone(),
+                        depth,
+                        is_dir,
+                        expanded,
+                    });
+                    walk(kid, depth + 1, out);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(&self.tree, 0, &mut out);
+        out
+    }
+}
+
 /// Orden de hijos: carpetas primero y luego alfabético sin distinguir mayúsculas (INV-4).
 #[must_use]
 pub fn compare_nodes(a: &FileNode, b: &FileNode) -> Ordering {
@@ -424,6 +465,41 @@ mod tests {
         assert!(!ws.begin_expand(&a), "ya cargado: solo se re-expande");
         let node = ws.node(&a.join("uno.md")).unwrap();
         assert_eq!(node.name, "uno.md");
+    }
+
+    #[test]
+    fn visible_nodes_follow_expansion() {
+        let dir = TempDir::new().unwrap();
+        for f in ["a/uno.md", "a/b/dos.md", "z.md"] {
+            touch(dir.path(), f);
+        }
+        let mut ws = Workspace::open(dir.path(), TreeFilters::default()).unwrap();
+        let shown = |ws: &Workspace| -> Vec<(String, usize)> {
+            ws.visible_nodes()
+                .iter()
+                .map(|n| {
+                    (
+                        n.path.file_name().unwrap().to_string_lossy().into_owned(),
+                        n.depth,
+                    )
+                })
+                .collect()
+        };
+        assert_eq!(shown(&ws), [("a".to_string(), 0), ("z.md".to_string(), 0)]);
+        let a = ws.root.join("a");
+        assert!(ws.begin_expand(&a));
+        ws.set_children(&a, load_children(&a, &ws.filters));
+        assert_eq!(
+            shown(&ws),
+            [
+                ("a".to_string(), 0),
+                ("b".to_string(), 1),
+                ("uno.md".to_string(), 1),
+                ("z.md".to_string(), 0)
+            ]
+        );
+        ws.collapse(&a);
+        assert_eq!(shown(&ws).len(), 2);
     }
 
     #[test]

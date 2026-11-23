@@ -85,9 +85,9 @@
 - [x] AC6 10 000 archivos sin bloquear UI 🧪 (ignored) + 👁 — `workspace::tests::perf_ten_thousand_files` (15 ms en release)
 
 ### US-2.2 Navegación
-- [ ] AC1 Clic simple / doble clic 👁 + 🧪 (INV-7)
-- [ ] AC2 Navegación por teclado 👁
-- [ ] AC3 Resaltado del activo 👁
+- [~] AC1 Clic simple / doble clic 👁 + 🧪 (INV-7) (🧪 `state::tabs::tests::*`, `app::tests::single_clicks_reuse_one_preview_tab`, `double_click_pins_the_opened_file`; verificación visual pendiente. Con un solo documento en memoria la «fijada» es solo el modelo; la barra de pestañas visible llega en US-3.1)
+- [~] AC2 Navegación por teclado 👁 (🧪 `explorer::tests::*`, `app::tests::keyboard_navigation_moves_selection_and_toggles`; verificación visual pendiente)
+- [~] AC3 Resaltado del activo 👁 (verificación visual pendiente)
 
 ### US-2.3 Operaciones de archivo
 - [ ] AC1 Menú contextual completo 👁

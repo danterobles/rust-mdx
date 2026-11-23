@@ -122,3 +122,16 @@ Decisiones:
 - Archivos y enlaces simbólicos: `follow_links(false)`.
 - Con `mdx <ruta>` que no existe, se muestra el error de lectura en la barra de estado.
 - Verificación 👁 AC1 y AC6 confirmada manualmente por el propietario el 2026-11-23.
+
+## US-2.2 Navegación — 🟡 implementada, pendiente verificación 👁 AC1–AC3 (rama feat/us-2.2-navegacion)
+Plan: `mdx-app/src/state/tabs.rs` (modelo INV-7), `explorer.rs` (vista, resalte, navegación pura), `app.rs` (clic, doble clic, teclas, `pin_on_load`), `mdx-core::workspace::visible_nodes`.
+- AC1 🧪 `state::tabs::tests::*` (INV-7: nunca más de una pestaña sin fijar), `app::tests::single_clicks_reuse_one_preview_tab`, `double_click_pins_the_opened_file`, `double_click_on_open_preview_pins_it_without_reloading`, `clicking_a_file_with_unsaved_changes_does_not_discard_them`. 👁 pendiente.
+- AC2 🧪 `explorer::tests::*` (↑/↓ con tope, → expande y entra, ← colapsa y sube al padre, Enter abre/alterna), `app::tests::keyboard_navigation_moves_selection_and_toggles`. 👁 pendiente.
+- AC3 👁 el archivo abierto se resalta con el color primario del tema; la fila con foco de teclado, con un gris más sutil.
+Decisiones:
+- **Alcance acordado con el propietario:** solo el modelo de pestañas (INV-7); la barra de pestañas visible, varios documentos abiertos a la vez, Ctrl+W y Ctrl+Tab se refinan en US-3.1. Mientras tanto, abrir un archivo reemplaza el documento actual (con el diálogo de cambios sin guardar si hace falta) y la «fijada» no tiene efecto visible.
+- `Ctrl/Cmd+O` y `mdx <archivo>` abren el archivo **fijado**; el clic simple, como preview; Nuevo, fijado.
+- Doble clic: `mouse_area` con `on_press` + `on_double_click` (un `button` captura el clic y no deja pasar el doble clic). El primer clic ya abre el archivo; el doble clic lo fija (`pin_on_load` si aún se está cargando).
+- Teclado del árbol: la suscripción global solo reenvía flechas/Enter si ningún widget los consumió (`status == Ignored`), así el editor enfocado conserva sus flechas. Sin selección: ↓ primera fila, ↑ última.
+- Pendiente de verificar a mano: que tras hacer clic en el explorador el editor pierda el foco y las flechas muevan el árbol.
+- `Tabs::{tabs, active, is_pinned}` llevan `#[allow(dead_code)]` hasta que la use US-3.1.
