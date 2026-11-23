@@ -78,6 +78,65 @@ pub fn extract(text: &str) -> Outline {
     outline
 }
 
+/// Rango de líneas (base 0, fin exclusivo) de un bloque de nivel superior del documento.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Block {
+    pub start_line: usize,
+    pub end_line: usize,
+}
+
+/// Bloques de nivel superior (párrafos, encabezados, listas, citas, código, tablas, reglas…) en
+/// orden de aparición, con las líneas de origen que ocupan.
+///
+/// Se omiten los bloques de metadatos y el HTML en bloque, que el visor de la vista previa no
+/// dibuja, de modo que la lista coincide uno a uno con los elementos de la vista previa.
+#[must_use]
+pub fn top_level_blocks(text: &str) -> Vec<Block> {
+    let options = Options::ENABLE_TABLES
+        | Options::ENABLE_STRIKETHROUGH
+        | Options::ENABLE_TASKLISTS
+        | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS
+        | Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS;
+    let mut line_starts = vec![0usize];
+    line_starts.extend(text.match_indices('\n').map(|(i, _)| i + 1));
+    let line_of = |offset: usize| line_starts.partition_point(|&start| start <= offset) - 1;
+    let to_block = |range: &std::ops::Range<usize>| {
+        let start_line = line_of(range.start);
+        // El rango suele incluir el salto de línea final: se cuenta hasta la última línea con texto.
+        let last = text[..range.end.min(text.len())]
+            .trim_end_matches(['\n', '\r'])
+            .len();
+        let end_line = line_of(last.saturating_sub(1).max(range.start)) + 1;
+        Block {
+            start_line,
+            end_line: end_line.max(start_line + 1),
+        }
+    };
+
+    let mut blocks = Vec::new();
+    let mut depth = 0usize;
+    let mut skip = false;
+    for (event, range) in Parser::new_ext(text, options).into_offset_iter() {
+        match event {
+            Event::Start(tag) => {
+                if depth == 0 {
+                    skip = matches!(tag, Tag::MetadataBlock(_) | Tag::HtmlBlock);
+                }
+                depth += 1;
+            }
+            Event::End(_) => {
+                depth -= 1;
+                if depth == 0 && !skip {
+                    blocks.push(to_block(&range));
+                }
+            }
+            Event::Rule if depth == 0 => blocks.push(to_block(&range)),
+            _ => {}
+        }
+    }
+    blocks
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,5 +241,30 @@ Título alternativo
 ###### Nivel 6
 ";
         insta::assert_debug_snapshot!(extract(text));
+    }
+
+    #[test]
+    fn top_level_blocks_cover_their_source_lines() {
+        let text = "# Título\n\nPárrafo uno\ncontinúa\n\n- a\n- b\n\n```\ncódigo\n```\n\n---\n";
+        let blocks = top_level_blocks(text);
+        let lines: Vec<_> = blocks.iter().map(|b| (b.start_line, b.end_line)).collect();
+        assert_eq!(lines, [(0, 1), (2, 4), (5, 7), (8, 11), (12, 13)]);
+    }
+
+    #[test]
+    fn top_level_blocks_skip_front_matter_and_handle_empty_input() {
+        assert_eq!(top_level_blocks(""), Vec::new());
+        let blocks = top_level_blocks("---\ntitle: x\n---\n\n# Real\n");
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].start_line, 4);
+    }
+
+    #[test]
+    fn top_level_blocks_keep_nested_content_inside_one_block() {
+        let text = "> cita\n> > anidada\n\n1. uno\n   - sub\n2. dos\n";
+        let blocks = top_level_blocks(text);
+        assert_eq!(blocks.len(), 2);
+        assert_eq!((blocks[0].start_line, blocks[0].end_line), (0, 2));
+        assert_eq!((blocks[1].start_line, blocks[1].end_line), (3, 6));
     }
 }

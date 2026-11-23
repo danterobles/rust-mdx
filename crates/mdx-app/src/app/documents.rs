@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use std::mem;
 
 use super::{
-    App, DiskState, Document, DocumentId, History, Instant, Message, Outline, Path, PendingAction,
-    Task, markdown, strings, text_editor,
+    App, Block, DiskState, Document, DocumentId, History, Instant, Layout, Message, Outline, Path,
+    PendingAction, Task, markdown, strings, text_editor,
 };
 
 /// Estado completo de un documento abierto que no es el activo.
@@ -27,6 +27,8 @@ pub(super) struct OpenDoc {
     pub(super) preview_edit_at: Instant,
     pub(super) external: Option<Document>,
     pub(super) outline: Outline,
+    pub(super) blocks: Vec<Block>,
+    pub(super) view_top: (usize, f32),
 }
 
 pub(super) type Parked = HashMap<DocumentId, OpenDoc>;
@@ -47,6 +49,8 @@ impl App {
             preview_edit_at: self.preview_edit_at,
             external: self.external.take(),
             outline: mem::take(&mut self.outline),
+            blocks: mem::take(&mut self.blocks),
+            view_top: mem::take(&mut self.view_top),
         }
     }
 
@@ -63,6 +67,8 @@ impl App {
         self.preview_edit_at = d.preview_edit_at;
         self.external = d.external;
         self.outline = d.outline;
+        self.blocks = d.blocks;
+        self.view_top = d.view_top;
     }
 
     /// Intercambia el documento activo con el aparcado `id`. No toca el modelo de pestañas.
@@ -134,32 +140,37 @@ impl App {
     }
 
     /// Activa la pestaña `id` (modelo y estado).
-    pub(super) fn select_tab(&mut self, id: DocumentId) {
-        if self.swap_active(id) {
-            self.tabs.set_active(id);
+    pub(super) fn select_tab(&mut self, id: DocumentId) -> Task<Message> {
+        if !self.swap_active(id) {
+            return Task::none();
+        }
+        self.tabs.set_active(id);
+        // Las medidas de la vista previa eran del documento anterior: se vuelve a medir.
+        self.preview_layout = Layout::default();
+        self.measure_preview()
+    }
+
+    pub(super) fn cycle_tab(&mut self, delta: isize) -> Task<Message> {
+        match self.tabs.neighbour(delta) {
+            Some(id) => self.select_tab(id),
+            None => Task::none(),
         }
     }
 
-    pub(super) fn cycle_tab(&mut self, delta: isize) {
-        if let Some(id) = self.tabs.neighbour(delta) {
-            self.select_tab(id);
-        }
-    }
-
-    pub(super) fn goto_tab(&mut self, n: usize) {
-        if let Some(id) = self.tabs.nth(n) {
-            self.select_tab(id);
+    pub(super) fn goto_tab(&mut self, n: usize) -> Task<Message> {
+        match self.tabs.nth(n) {
+            Some(id) => self.select_tab(id),
+            None => Task::none(),
         }
     }
 
     /// Añade `doc` como nueva pestaña activa. Si ya estaba abierto solo activa su pestaña.
     pub(super) fn add_doc(&mut self, doc: Document, pinned: bool) -> Task<Message> {
         if let Some(id) = doc.path.as_deref().and_then(|p| self.find_open(p)) {
-            self.select_tab(id);
             if pinned {
                 self.tabs.pin(id);
             }
-            return Task::none();
+            return self.select_tab(id);
         }
         // Un «Sin título» vacío y sin tocar se reemplaza en vez de acumularse.
         let pristine = self.doc.path.is_none() && !self.dirty && self.doc.text.is_empty();
@@ -213,7 +224,8 @@ impl App {
         let next = self.tabs.active().and_then(|id| self.parked.remove(&id));
         if let Some(next) = next {
             self.put_active(next);
-            return Task::none();
+            self.preview_layout = Layout::default();
+            return self.measure_preview();
         }
         let doc = Document::untitled();
         self.tabs.open_pinned(doc.id);
@@ -225,11 +237,10 @@ impl App {
     /// Abre `path` en una pestaña (la reutiliza si ya está abierta). Con `pin` queda fijada.
     pub(super) fn open_path(&mut self, path: std::path::PathBuf, pin: bool) -> Task<Message> {
         if let Some(id) = self.find_open(&path) {
-            self.select_tab(id);
             if pin {
                 self.tabs.pin(id);
             }
-            return Task::none();
+            return self.select_tab(id);
         }
         if pin {
             self.pin_on_load = Some(path.clone());

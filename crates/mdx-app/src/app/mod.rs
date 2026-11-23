@@ -5,6 +5,7 @@ mod documents;
 mod editing;
 mod explorer_ops;
 mod preview;
+mod sync;
 #[cfg(test)]
 mod tests;
 
@@ -17,7 +18,8 @@ use std::time::{Duration, Instant};
 
 use futures::{SinkExt, Stream, StreamExt};
 use iced::widget::{
-    Column, Row, button, container, markdown, pane_grid, scrollable, text, text_editor, tooltip,
+    Column, Row, button, checkbox, container, markdown, pane_grid, scrollable, text, text_editor,
+    tooltip,
 };
 use iced::{
     Element, Event, Font, Length, Subscription, Task, Theme, event, highlighter, keyboard, time,
@@ -28,7 +30,7 @@ use mdx_core::fileops;
 use mdx_core::history::History;
 use mdx_core::io::SavedInfo;
 use mdx_core::link::{self, LinkTarget};
-use mdx_core::outline::Outline;
+use mdx_core::outline::{Block, Outline};
 use mdx_core::watcher::{self, FsEvent};
 use mdx_core::workspace::{self, FileNode, TreeFilters, Workspace};
 use mdx_core::{CoreError, DiskState, Document, DocumentId};
@@ -40,15 +42,33 @@ use crate::explorer::{
 };
 use crate::layout::{PaneKind, initial_panes, panes_without_preview};
 use crate::outline as outline_panel;
+use crate::preview_sync::{self, Layout};
 use crate::shortcuts::{self, ShortcutAction};
 use crate::state::tabs::Tabs;
 use crate::statusbar::{Stats, display_col};
 use crate::strings;
 
+/// Visor de Markdown por defecto; solo define cómo se convierte un enlace en mensaje.
+struct PreviewViewer;
+
+impl markdown::Viewer<'_, String> for PreviewViewer {
+    fn on_link_click(url: markdown::Uri) -> String {
+        url
+    }
+}
+
 pub struct App {
     explorer: ExplorerState,
     sidebar: Sidebar,
     outline: Outline,
+    /// Bloques de nivel superior del documento (líneas de origen), para el scroll sincronizado.
+    blocks: Vec<Block>,
+    /// Primera fila visible del editor: (línea, fracción de esa línea).
+    view_top: (usize, f32),
+    /// Posición de los bloques ya renderizados en la vista previa del documento activo.
+    preview_layout: Layout,
+    /// Scroll sincronizado editor → vista previa (US-3.3 AC2).
+    sync: SyncScroll,
     tabs: Tabs,
     /// Documentos abiertos que no son el activo (ver `documents`).
     parked: Parked,
@@ -119,11 +139,26 @@ pub enum FilterKind {
     OnlyMarkdown,
 }
 
+/// Estado del scroll sincronizado.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyncScroll {
+    On,
+    Off,
+}
+
 /// Contenido del panel izquierdo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sidebar {
     Files,
     Outline,
+}
+
+/// Resultado del parseo en segundo plano de un documento.
+#[derive(Debug, Clone)]
+pub struct Parsed {
+    pub items: Vec<markdown::Item>,
+    pub outline: Outline,
+    pub blocks: Vec<Block>,
 }
 
 /// Respuesta del usuario al diálogo de cambios sin guardar.
@@ -174,7 +209,10 @@ pub enum Message {
     WatchFailed(String),
     DiskInspected(DocumentId, PathBuf, Result<Document, CoreError>),
     ResolveConflict(ConflictChoice),
-    PreviewParsed(DocumentId, u64, Vec<markdown::Item>, Outline),
+    PreviewParsed(DocumentId, u64, Parsed),
+    PreviewMeasured(DocumentId, Layout),
+    SetSyncScroll(bool),
+    LayoutChanged,
     SetSidebar(Sidebar),
     GoToLine(usize),
     LinkClicked(String),
@@ -217,6 +255,10 @@ impl App {
                 },
                 sidebar: Sidebar::Files,
                 outline: Vec::new(),
+                blocks: Vec::new(),
+                view_top: (0, 0.0),
+                preview_layout: Layout::default(),
+                sync: SyncScroll::On,
                 tabs,
                 parked: Parked::new(),
                 pin_on_load,
@@ -282,6 +324,7 @@ impl App {
             }),
             window::close_requests().map(|_| Message::CloseRequested),
             self.watch_subscriptions(),
+            window::resize_events().map(|_| Message::LayoutChanged),
             if self.preview_pending {
                 time::every(PREVIEW_TICK).map(Message::PreviewTick)
             } else {
@@ -296,12 +339,11 @@ impl App {
         match message {
             Message::PaneResized(event) => {
                 self.panes.resize(event.split, event.ratio);
-                Task::none()
+                // El ancho de la vista previa cambió: los bloques miden otra altura.
+                self.measure_preview()
             }
-            Message::Edit(action) => {
-                self.handle_edit(action);
-                Task::none()
-            }
+            Message::LayoutChanged => self.measure_preview(),
+            Message::Edit(action) => self.handle_edit(action),
             Message::Shortcut(action) => self.handle_shortcut(action),
             Message::FilePicked(Some(path)) => self.open_path(path, true),
             Message::FilePicked(None) | Message::FolderPicked(None) => Task::none(),
@@ -312,20 +354,9 @@ impl App {
                 Task::none()
             }
             Message::Saved(id, result) => self.handle_saved(id, result),
-            Message::SelectTab(id) => {
-                self.select_tab(id);
-                Task::none()
-            }
+            Message::SelectTab(id) => self.select_tab(id),
             Message::CloseTab(id) => self.request(PendingAction::CloseTab(id)),
             Message::CloseRequested => self.request(PendingAction::Close),
-            Message::PreviewTick(now) => {
-                if self.preview_pending
-                    && now.saturating_duration_since(self.preview_edit_at) >= PREVIEW_DEBOUNCE
-                {
-                    return self.start_preview_parse();
-                }
-                Task::none()
-            }
             Message::Fs(events) => self.handle_fs(&events),
             Message::WatchFailed(err) => {
                 self.set_status(format!("{}: {err}", strings::STATUS_WATCH_FAILED), true);
@@ -335,27 +366,15 @@ impl App {
                 .with_doc(id, |app| app.handle_disk_inspected(id, &path, result))
                 .unwrap_or_else(Task::none),
             Message::ResolveConflict(choice) => self.resolve_conflict(choice),
-            Message::PreviewParsed(id, generation, items, outline) => {
-                // Puede llegar para un documento que ya no es el activo.
-                let _ = self.with_doc(id, |app| {
-                    if generation == app.preview_gen {
-                        // Con la vista previa oculta no se parsea (items vacíos): se conserva.
-                        if app.preview_visible {
-                            app.preview = items;
-                        }
-                        app.outline = outline;
-                    }
-                });
-                Task::none()
-            }
             Message::SetSidebar(sidebar) => {
                 self.sidebar = sidebar;
                 Task::none()
             }
-            Message::GoToLine(line) => {
-                self.go_to_line(line);
-                Task::none()
-            }
+            Message::GoToLine(line) => self.go_to_line(line),
+            m @ (Message::PreviewTick(_)
+            | Message::PreviewParsed(..)
+            | Message::PreviewMeasured(..)
+            | Message::SetSyncScroll(_)) => self.update_preview(m),
             m @ (Message::FolderPicked(Some(_))
             | Message::WorkspaceOpened(_)
             | Message::ToggleDir(_)
@@ -389,18 +408,9 @@ impl App {
             ShortcutAction::New => self.new_untitled(),
             ShortcutAction::Open => Task::perform(pick_file_to_open(), Message::FilePicked),
             ShortcutAction::CloseTab => self.request(PendingAction::CloseTab(self.doc.id)),
-            ShortcutAction::NextTab => {
-                self.cycle_tab(1);
-                Task::none()
-            }
-            ShortcutAction::PrevTab => {
-                self.cycle_tab(-1);
-                Task::none()
-            }
-            ShortcutAction::GoToTab(n) => {
-                self.goto_tab(n);
-                Task::none()
-            }
+            ShortcutAction::NextTab => self.cycle_tab(1),
+            ShortcutAction::PrevTab => self.cycle_tab(-1),
+            ShortcutAction::GoToTab(n) => self.goto_tab(n),
             ShortcutAction::OpenFolder => Task::perform(pick_folder(), Message::FolderPicked),
             ShortcutAction::Save => self.save(),
             ShortcutAction::SaveAs => self.save_as(),
@@ -443,9 +453,9 @@ impl App {
         match choice {
             GuardChoice::Save => {
                 // Se muestra la pestaña que se está guardando (puede pedir «Guardar como»).
-                self.select_tab(id);
+                let select = self.select_tab(id);
                 self.after_save = Some(action);
-                self.save()
+                Task::batch([select, self.save()])
             }
             GuardChoice::Discard => {
                 let task = self.close_tab(id);
@@ -599,9 +609,30 @@ impl App {
                     )
                     .into(),
                 PaneKind::Preview => {
-                    scrollable(markdown::view(&self.preview, &theme).map(Message::LinkClicked))
-                        .width(Length::Fill)
-                        .height(Length::Fill)
+                    let settings = markdown::Settings::from(&theme);
+                    let blocks = self.preview.iter().enumerate().map(|(i, item)| {
+                        container(markdown::item(&PreviewViewer, settings, item, i))
+                            .id(preview_sync::block_id(i))
+                            .into()
+                    });
+                    let column: Element<'_, String> = Column::with_children(blocks)
+                        .spacing(settings.spacing)
+                        .into();
+                    Column::new()
+                        .spacing(6)
+                        .push(
+                            checkbox(self.sync == SyncScroll::On)
+                                .label(strings::SYNC_SCROLL)
+                                .size(16)
+                                .text_size(13)
+                                .on_toggle(Message::SetSyncScroll),
+                        )
+                        .push(
+                            scrollable(column.map(Message::LinkClicked))
+                                .id(iced::widget::Id::new(preview_sync::SCROLL_ID))
+                                .width(Length::Fill)
+                                .height(Length::Fill),
+                        )
                         .into()
                 }
             };

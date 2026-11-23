@@ -205,3 +205,16 @@ Decisiones:
 - Pendiente de decidir más adelante: marcar en el esquema el encabezado actual según el cursor (no está en el PRD).
 - `insta` entra en uso (versión 1.49 de STACK.md); `cargo insta review` no está instalado, los tests no lo necesitan.
 - Verificación 👁 AC1 y AC2 confirmada manualmente por el propietario el 2026-11-23.
+
+## US-3.3 Scroll sincronizado — ✅ completa (rama feat/us-3.3-scroll-sincronizado)
+Plan: investigación previa (informada al propietario) → ADR 0007 (feature `advanced`, aprobada el 2026-11-23); `mdx-core::outline::top_level_blocks`, `mdx-app/src/preview_sync.rs`, `app/sync.rs`, `editor::top_visible_line`.
+- AC1 cómo funciona: (1) cada `Scroll`/`Move`/edición sondea la primera fila visible del editor (clic virtual en (0,0) + restaurar cursor); (2) tras cada parseo, cambio de pestaña o de tamaño se mide con una `Operation` dónde quedó cada bloque renderizado; (3) `target_offset` ubica la línea en su bloque (interpolando dentro) y se hace `scroll_to` en la vista previa. Sin medidas coincidentes se usa una proporción por líneas.
+- AC2 casilla «Sincronizar scroll con el editor» en la cabecera de la vista previa (activada por defecto). Sin atajo de teclado (no está en el PRD); la casilla no es accesible por teclado (NFR-7, a revisar en F3).
+Evidencia de la investigación: bloques `pulldown-cmark` vs. `Item` de iced coinciden 1:1 en los 9 documentos `.md` del repo (ahora test de regresión `source_blocks_match_the_preview_items_one_to_one_for_the_repo_docs`); el prototipo midió 25 bloques en `gfm_showcase.md` con posiciones crecientes (contenido 1706 px, vista 705 px); el sondeo devuelve la línea 10 tras `Scroll{10}` y la 35 tras 25 más.
+Decisiones y límites:
+- Unidireccional (editor → vista previa).
+- La medición se repite al cambiar el tamaño de la ventana o de los paneles (`window::resize_events`, `PaneResized`).
+- Si la sincronía está desactivada o la vista previa oculta no se mide ni se desplaza.
+- Con documentos muy grandes (`large_5mb.md`) el recorrido del árbol tras cada parseo puede notarse: medir en el cierre de F3 (NFR-4).
+- `PreviewViewer` mínimo propio (solo enlace → mensaje); el resto del aspecto es el predeterminado de iced.
+- Verificación 👁 AC1 y AC2 confirmada manualmente por el propietario el 2026-11-23.

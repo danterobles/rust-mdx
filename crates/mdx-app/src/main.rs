@@ -5,6 +5,7 @@ mod editor;
 mod explorer;
 mod layout;
 mod outline;
+mod preview_sync;
 mod shortcuts;
 mod state;
 mod statusbar;

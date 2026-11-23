@@ -11,6 +11,7 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 ## [Unreleased]
 
 ### Added
+- Scroll sincronizado: al desplazar o escribir en el editor, la vista previa se posiciona en el bloque correspondiente; se puede desactivar con la casilla «Sincronizar scroll con el editor» [US-3.3]
 - Panel «Esquema» (conmutador junto a «Archivos»): lista de encabezados H1–H6 del documento activo, indentados por nivel; un clic lleva el cursor a esa línea [US-3.2]
 - Pestañas: varios documentos abiertos a la vez, con `●` si tienen cambios, cursiva en la pestaña de vista previa y la ruta completa al pasar el ratón [US-3.1]
 - Ctrl/Cmd+W cierra la pestaña (con aviso si tiene cambios); Ctrl+Tab y Ctrl+Shift+Tab cambian de pestaña; Ctrl/Cmd+1…9 saltan a una pestaña [US-3.1]

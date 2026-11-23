@@ -117,8 +117,8 @@
 - [x] AC3 Extracción con snapshots 🧪 — `outline::tests::*` (snapshot `insta`), `app::tests::outline_is_empty_until_the_debounced_parse_arrives`, `outline_keeps_updating_when_the_preview_is_hidden`
 
 ### US-3.3 Scroll sincronizado
-- [ ] AC1 Sincronía editor→preview 👁
-- [ ] AC2 Toggle 👁
+- [x] AC1 Sincronía editor→preview 👁
+- [x] AC2 Toggle 👁
 
 ### US-3.4 Buscar y reemplazar
 - [ ] AC1 Buscar / reemplazar en documento 🧪 + 👁
