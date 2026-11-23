@@ -257,6 +257,95 @@ fn perf_edit_cost_on_large_documents() {
     }
 }
 
+/// NFR-4 en F3: coste de las funciones añadidas en la fase (buscar, scroll sincronizado,
+/// esquema). `cargo test --release -p mdx-app perf_f3 -- --ignored --nocapture`.
+#[test]
+#[ignore = "rendimiento: requiere fixtures/large_*.md (cargo xtask gen-fixtures)"]
+fn perf_f3_features_on_large_documents() {
+    let time = |f: &mut dyn FnMut()| {
+        let t = Instant::now();
+        f();
+        t.elapsed().as_millis()
+    };
+    for name in ["large_1mb.md", "large_5mb.md"] {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures")
+            .join(name);
+        let bytes = std::fs::read(&path).expect("ejecuta `cargo xtask gen-fixtures`");
+        let doc = Document::from_bytes(&path, &bytes, None).unwrap();
+        let (mut app, _) = App::new(None);
+        let _ = app.update(Message::DocumentLoaded(Ok(doc)));
+
+        // Parseos que corren en un hilo aparte en la app real.
+        let text = app.doc.text.clone();
+        let outline_ms = time(&mut || {
+            let _ = mdx_core::outline::extract(&text);
+        });
+        let blocks_ms = time(&mut || {
+            let _ = mdx_core::outline::top_level_blocks(&text);
+        });
+
+        // Buscar: abrir la barra y escribir un patrón con muchas coincidencias.
+        let _ = app.update(Message::Shortcut(ShortcutAction::Find));
+        let find_ms = time(&mut || {
+            let _ = app.update(Message::FindQueryChanged("Sección".to_owned()));
+        });
+        let matches = app.find.matches.len();
+        let next_ms = time(&mut || {
+            let _ = app.update(Message::FindNext);
+        });
+        // Pulsación con la barra de búsqueda abierta (recalcula coincidencias).
+        let mut worst = 0u128;
+        let mut total = 0u128;
+        for _ in 0..10 {
+            let ms = time(&mut || type_char(&mut app, 'x'));
+            worst = worst.max(ms);
+            total += ms;
+        }
+        // Reemplazar todo (un paso de deshacer).
+        let _ = app.update(Message::Shortcut(ShortcutAction::Replace));
+        let _ = app.update(Message::ReplaceChanged("Parte".to_owned()));
+        let replace_ms = time(&mut || {
+            let _ = app.update(Message::ReplaceAll);
+        });
+        let undo_ms = time(&mut || {
+            let _ = app.update(Message::Shortcut(ShortcutAction::Undo));
+        });
+        // Scroll de rueda: sondeo de la primera línea visible.
+        let scroll_ms = time(&mut || {
+            for _ in 0..10 {
+                let _ = app.update(Message::Edit(Action::Scroll { lines: 5 }));
+            }
+        }) / 10;
+        eprintln!(
+            "PERF-F3 {name}: esquema={outline_ms} ms, bloques={blocks_ms} ms (ambos en hilo aparte), \
+             buscar «Sección» ({matches} coincidencias)={find_ms} ms, siguiente={next_ms} ms, \
+             pulsación con la barra abierta={} ms (peor {worst} ms), reemplazar todo={replace_ms} ms, \
+             deshacer={undo_ms} ms, scroll (sondeo)={scroll_ms} ms",
+            total / 10
+        );
+    }
+}
+
+#[test]
+fn replace_all_and_undo_work_on_documents_big_enough_to_rebuild_the_editor() {
+    // El camino «masivo»: más de 64 KB se aplica reconstruyendo el editor.
+    let text = "uno dos\n".repeat(20_000);
+    let (mut app, _) = App::new(None);
+    open_find_with(&mut app, &text, "uno");
+    let _ = app.update(Message::Shortcut(ShortcutAction::Replace));
+    let _ = app.update(Message::ReplaceChanged("1".to_owned()));
+    let _ = app.update(Message::ReplaceAll);
+    assert!(app.content.text().starts_with("1 dos\n1 dos\n"));
+    assert_eq!(app.find.notice.as_deref(), Some("20000 reemplazos"));
+    assert_eq!(app.title(), "● a.md — Mdx");
+    let _ = app.update(Message::Shortcut(ShortcutAction::Undo));
+    assert_eq!(app.content.text(), text);
+    assert_eq!(app.title(), "a.md — Mdx", "volvió al estado guardado");
+    let _ = app.update(Message::Shortcut(ShortcutAction::Redo));
+    assert!(app.content.text().starts_with("1 dos\n"));
+}
+
 fn temp_workspace() -> (tempfile::TempDir, Workspace) {
     let dir = tempfile::TempDir::new().unwrap();
     std::fs::create_dir_all(dir.path().join("sub")).unwrap();

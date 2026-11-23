@@ -10,6 +10,8 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-23
+
 ### Added
 - Sesión: al cerrar (y al abrir o cerrar pestañas o carpetas) se guarda la carpeta, las pestañas abiertas, la pestaña activa, las carpetas expandidas y el tamaño de los paneles; al abrir Mdx se restaura (también con `mdx <ruta>`, que además abre ese archivo o carpeta), omitiendo lo que ya no existe [US-3.5]
 - «Recientes»: las últimas 10 carpetas y 10 archivos abiertos, en el panel de archivos cuando no hay carpeta abierta [US-3.5]
@@ -52,6 +54,7 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 - Ventana principal «Mdx» con explorador, editor y vista previa (20/40/40), divisores arrastrables y barra de estado [US-0.2]
 - Especificación inicial: PRD, DATA, ARCHITECTURE, STACK, CHECKLIST y CLAUDE.md.
 
-[Unreleased]: https://github.com/OWNER/mdx/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/OWNER/mdx/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/OWNER/mdx/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/OWNER/mdx/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/OWNER/mdx/releases/tag/v0.2.0

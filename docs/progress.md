@@ -247,3 +247,18 @@ Decisiones y puntos a revisar:
 - Los recientes no se muestran con una carpeta abierta (se llega a ellos al cerrar la carpeta); un menú «Recientes» global queda para más adelante si hace falta.
 - `clippy::assert_is_empty` permitido solo en los tests (`cfg_attr(test)`) de `mdx-core` y `mdx-app`.
 - Verificación manual de sesión, recientes y autoguardado confirmada por el propietario el 2026-11-23.
+
+## Cierre de F3 — mediciones y hallazgos (rama chore/cierre-f3)
+- **Corregido: «Reemplazar todo» tardaba 11 s con 1 MB y 261 s con 5 MB** (pegar megabytes en el `text_editor` es cuadrático en `cosmic-text`). Ahora el reemplazo masivo y los parches grandes de deshacer/rehacer (> 64 KB) **reconstruyen el editor** (`apply_bulk_edit`, `rebuild_editor`): 0,76 s / 3,5 s. También `History` ya no descarta la última edición aunque supere el presupuesto de 8 MB (a 5 MB «reemplazar todo» no se podía deshacer).
+- Medición NFR-4 reproducible: `cargo xtask gen-fixtures` y `cargo test --release -p mdx-app perf_ -- --ignored --nocapture --test-threads=1` (en paralelo se estorban por el bloqueo global del sistema de fuentes).
+- **NFR-3 NO se cumple con un archivo de 100 KB (176 MB frente al objetivo < 80 MB).** Desglose medido con `footprint` (macOS, release): reposo 63 MB → archivo mínimo 82 MB (el resaltador carga ≈19 MB) → **archivo de 100 KB 176 MB**: ≈61 MB el buffer del editor (`cosmic-text` guarda glifos y capas de todo el texto) y ≈33 MB la vista previa (un `rich_text` por bloque, todos construidos aunque no se vean). La medición de F1 (63 MB) era solo en reposo, sin archivo. Conseguirlo exige virtualizar editor y vista previa (renderizar solo lo visible), o un `ropey` + viewport (riesgo ya previsto en PRD §11), o redefinir el NFR: **decisión del propietario** (CLAUDE.md §11).
+- NFR-1: 12,39 MB (límite 15 MB; creció 0,9 MB desde F1). NFR-2: ≈145–180 ms hasta wgpu listo. NFR-9: mdx-core ≥ 79 % por archivo (workspace 78 %).
+- Las medidas de memoria se hicieron con `MDX_CONFIG_DIR`/`MDX_STATE_DIR` temporales: al restaurar una sesión previa (con otro archivo abierto) el footprint sube, así que hay que medir con sesión vacía.
+
+## Cierre de F3 → v0.4.0 (2026-11-23)
+- Historias F3: US-3.1 a US-3.5 completas (AC verificados).
+- **NFR-3 incumplido (176 MB con un archivo de 100 KB frente a < 80 MB)**: decisión del propietario (opción 3): cerrar la F3 con el NFR marcado como no cumplido y valor medido, y decidir antes de la F4 entre virtualizar editor y vista previa (ADR) o redefinir el NFR en el PRD. La F5 vuelve a exigirlo.
+- Otros NFR de F3: ver tabla de CHECKLIST (NFR-2, NFR-4 y NFR-7 en `[~]`).
+- Hito F3 en `[~]`: verificadas las cinco historias por separado; falta un recorrido único de sesión.
+- Siguen abiertos de fases anteriores: Hito F1 y comprobaciones 👁 de NFR-2/3/4; CI remoto (AC2 de US-0.1); licencia y URL del repositorio en `TBD`.
+- Tags `v0.2.0`, `v0.3.0` y `v0.4.0`: **no creados**; requieren autorización explícita.

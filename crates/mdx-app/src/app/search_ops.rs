@@ -242,8 +242,9 @@ impl App {
             self.find.notice = Some(strings::FIND_NO_RESULTS.to_owned());
             return Task::none();
         }
-        self.content.perform(Action::SelectAll);
-        let edit = self.apply_text_edit(&replaced);
+        let first = self.find.matches.first().map_or(0, |m| m.start);
+        let cursor = offset_to_pos(&self.doc.text, first);
+        let edit = self.apply_bulk_edit(&replaced, cursor);
         self.find.notice = Some(if count == 1 {
             strings::FIND_REPLACED_ONE.to_owned()
         } else {

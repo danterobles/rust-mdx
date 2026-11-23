@@ -5,6 +5,9 @@ use super::{
     Path, PathBuf, SavedInfo, Task, count_words, editor, strings, text_editor,
 };
 
+/// Parches de deshacer/rehacer mayores que esto se aplican reconstruyendo el editor.
+const BULK_PATCH_BYTES: usize = 64 * 1024;
+
 impl App {
     pub(super) fn handle_edit(&mut self, action: text_editor::Action) -> Task<Message> {
         if !action.is_edit() {
@@ -65,9 +68,56 @@ impl App {
             self.history.redo(&self.doc.text)
         };
         if let Some(patch) = patch {
-            editor::apply_patch(&mut self.content, &self.doc.text, &patch);
+            if patch.replacement.len().max(patch.end - patch.start) > BULK_PATCH_BYTES {
+                let (start, end) = (
+                    patch.start.min(self.doc.text.len()),
+                    patch.end.min(self.doc.text.len()),
+                );
+                let rebuilt = format!(
+                    "{}{}{}",
+                    &self.doc.text[..start],
+                    patch.replacement,
+                    &self.doc.text[end..]
+                );
+                self.rebuild_editor(&rebuilt, patch.cursor);
+            } else {
+                editor::apply_patch(&mut self.content, &self.doc.text, &patch);
+            }
             self.refresh_dirty();
         }
+    }
+
+    /// Reemplaza todo el contenido del editor y coloca el cursor en `cursor`.
+    fn rebuild_editor(&mut self, text: &str, cursor: (usize, usize)) {
+        self.content = text_editor::Content::with_text(text);
+        self.content.move_to(text_editor::Cursor {
+            position: text_editor::Position {
+                line: cursor.0,
+                column: cursor.1,
+            },
+            selection: None,
+        });
+    }
+
+    /// Sustituye el texto completo como **una** edición (historial, «sin guardar», vista
+    /// previa) reconstruyendo el editor. Pegar megabytes de golpe tarda segundos; reconstruir,
+    /// una fracción (medido: 1 MB ≈ 11 s pegando frente a ≈ 0,7 s reconstruyendo).
+    pub(super) fn apply_bulk_edit(
+        &mut self,
+        new_text: &str,
+        cursor: (usize, usize),
+    ) -> Task<Message> {
+        self.tabs.pin(self.doc.id);
+        let before = editor::cursor_pos(&self.content);
+        let old = std::mem::take(&mut self.doc.text);
+        self.rebuild_editor(new_text, cursor);
+        self.doc.text = self.content.text();
+        self.history
+            .record(&old, &self.doc.text, before, cursor, false);
+        self.last_edit_at = None;
+        self.refresh_stats();
+        self.refresh_find_matches();
+        self.update_view_top()
     }
 
     /// Sincroniza `doc.text` con el editor y recalcula dirty y palabras.
