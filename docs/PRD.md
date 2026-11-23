@@ -320,7 +320,7 @@ Como usuario, quiero crear, abrir y guardar archivos `.md`.
 ## 12. Preguntas abiertas
 
 1. Nombre definitivo del producto y bundle ID (`mx.doitconsulting.mdx` propuesto).
-2. Licencia: ¿MIT/Apache-2.0 open source o propietaria?
+2. ~~Licencia: ¿MIT/Apache-2.0 open source o propietaria?~~ **Resuelta (2026-11-23): MIT.** Repositorio: <https://github.com/danterobles/rust-mdx>.
 3. ¿Se incluye actualización automática en v1 o v1.1?
 4. ¿Idioma de UI solo español en v1, o español + inglés?
 

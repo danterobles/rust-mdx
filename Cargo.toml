@@ -5,8 +5,8 @@ members = ["crates/mdx-core", "crates/mdx-app", "xtask"]
 [workspace.package]
 version = "0.5.0"
 edition = "2024"
-license = "TBD"
-repository = "TBD"
+license = "MIT"
+repository = "https://github.com/danterobles/rust-mdx"
 rust-version = "1.92"
 
 [workspace.dependencies]

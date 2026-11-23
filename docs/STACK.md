@@ -90,8 +90,8 @@ members = ["crates/mdx-core", "crates/mdx-app", "xtask"]
 [workspace.package]
 version = "0.0.0"          # ÚNICA fuente de versión; ver CLAUDE.md §Versionado
 edition = "2024"
-license = "TBD"            # pregunta abierta del PRD
-repository = "TBD"
+license = "MIT"
+repository = "https://github.com/danterobles/rust-mdx"
 rust-version = "1.92"      # MSRV: rfd 0.18 (iced 0.14: 1.88)
 
 [workspace.dependencies]
