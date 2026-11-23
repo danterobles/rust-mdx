@@ -107,9 +107,9 @@
 ## Fase 3 — Productividad → v0.4.0
 
 ### US-3.1 Pestañas
-- [~] AC1 Ctrl/Cmd+W con diálogo 👁 (🧪 `app::tests::opening_several_files_*`, `switching_tabs_preserves_*`, `ctrl_w_closes_a_clean_tab_*`, `closing_a_dirty_tab_asks_first_*`, `saving_from_the_guard_dialog_*`; verificación visual pendiente)
-- [~] AC2 Ctrl+Tab y Ctrl/Cmd+1..9 👁 (🧪 `app::tests::tab_shortcuts_cycle_and_jump`, `shortcuts::tests::maps_tab_shortcuts`, `state::tabs::tests::cycles_*`; verificación visual pendiente)
-- [~] AC3 `●` y tooltip 👁 (🧪 `app::tests::tab_label_shows_dirty_mark_*`; verificación visual pendiente)
+- [x] AC1 Ctrl/Cmd+W con diálogo 👁
+- [x] AC2 Ctrl+Tab y Ctrl/Cmd+1..9 👁
+- [x] AC3 `●` y tooltip 👁
 
 ### US-3.2 Outline
 - [ ] AC1 Lista H1–H6 indentada 👁
