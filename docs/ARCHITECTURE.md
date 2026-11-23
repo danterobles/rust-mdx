@@ -90,6 +90,7 @@ mdx-app/src/
 ├── layout.rs        # disposición del pane_grid (20/40/40), lógica pura
 ├── editor.rs        # key_binding (Tab), aplicación de parches de historial
 ├── explorer.rs      # vista del árbol de archivos y menú de filtros
+├── outline.rs       # panel «Esquema» (encabezados del documento activo)
 ├── statusbar.rs     # texto de la barra de estado (línea:col, palabras, EOL, codificación)
 ├── state/
 │   ├── tabs.rs      # lógica pura de pestañas (testeable); en US-2.2 solo el modelo

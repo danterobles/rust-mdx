@@ -28,6 +28,7 @@ use mdx_core::fileops;
 use mdx_core::history::History;
 use mdx_core::io::SavedInfo;
 use mdx_core::link::{self, LinkTarget};
+use mdx_core::outline::Outline;
 use mdx_core::watcher::{self, FsEvent};
 use mdx_core::workspace::{self, FileNode, TreeFilters, Workspace};
 use mdx_core::{CoreError, DiskState, Document, DocumentId};
@@ -38,6 +39,7 @@ use crate::explorer::{
     PromptKind,
 };
 use crate::layout::{PaneKind, initial_panes, panes_without_preview};
+use crate::outline as outline_panel;
 use crate::shortcuts::{self, ShortcutAction};
 use crate::state::tabs::Tabs;
 use crate::statusbar::{Stats, display_col};
@@ -45,6 +47,8 @@ use crate::strings;
 
 pub struct App {
     explorer: ExplorerState,
+    sidebar: Sidebar,
+    outline: Outline,
     tabs: Tabs,
     /// Documentos abiertos que no son el activo (ver `documents`).
     parked: Parked,
@@ -115,6 +119,13 @@ pub enum FilterKind {
     OnlyMarkdown,
 }
 
+/// Contenido del panel izquierdo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sidebar {
+    Files,
+    Outline,
+}
+
 /// Respuesta del usuario al diálogo de cambios sin guardar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GuardChoice {
@@ -163,7 +174,9 @@ pub enum Message {
     WatchFailed(String),
     DiskInspected(DocumentId, PathBuf, Result<Document, CoreError>),
     ResolveConflict(ConflictChoice),
-    PreviewParsed(DocumentId, u64, Vec<markdown::Item>),
+    PreviewParsed(DocumentId, u64, Vec<markdown::Item>, Outline),
+    SetSidebar(Sidebar),
+    GoToLine(usize),
     LinkClicked(String),
     LinkOpened(Result<(), String>),
 }
@@ -202,6 +215,8 @@ impl App {
                     context: None,
                     prompt: None,
                 },
+                sidebar: Sidebar::Files,
+                outline: Vec::new(),
                 tabs,
                 parked: Parked::new(),
                 pin_on_load,
@@ -267,7 +282,7 @@ impl App {
             }),
             window::close_requests().map(|_| Message::CloseRequested),
             self.watch_subscriptions(),
-            if self.preview_pending && self.preview_visible {
+            if self.preview_pending {
                 time::every(PREVIEW_TICK).map(Message::PreviewTick)
             } else {
                 Subscription::none()
@@ -320,13 +335,25 @@ impl App {
                 .with_doc(id, |app| app.handle_disk_inspected(id, &path, result))
                 .unwrap_or_else(Task::none),
             Message::ResolveConflict(choice) => self.resolve_conflict(choice),
-            Message::PreviewParsed(id, generation, items) => {
+            Message::PreviewParsed(id, generation, items, outline) => {
                 // Puede llegar para un documento que ya no es el activo.
                 let _ = self.with_doc(id, |app| {
                     if generation == app.preview_gen {
-                        app.preview = items;
+                        // Con la vista previa oculta no se parsea (items vacíos): se conserva.
+                        if app.preview_visible {
+                            app.preview = items;
+                        }
+                        app.outline = outline;
                     }
                 });
+                Task::none()
+            }
+            Message::SetSidebar(sidebar) => {
+                self.sidebar = sidebar;
+                Task::none()
+            }
+            Message::GoToLine(line) => {
+                self.go_to_line(line);
                 Task::none()
             }
             m @ (Message::FolderPicked(Some(_))
@@ -473,6 +500,25 @@ impl App {
         .into()
     }
 
+    /// Conmutador «Archivos | Esquema» del panel izquierdo.
+    fn sidebar_switch(&self) -> Element<'_, Message> {
+        let tab = |label: &'static str, target: Sidebar| {
+            button(text(label).size(13))
+                .padding([2, 8])
+                .style(if self.sidebar == target {
+                    button::primary
+                } else {
+                    button::secondary
+                })
+                .on_press(Message::SetSidebar(target))
+        };
+        Row::new()
+            .spacing(4)
+            .push(tab(strings::SIDEBAR_FILES, Sidebar::Files))
+            .push(tab(strings::SIDEBAR_OUTLINE, Sidebar::Outline))
+            .into()
+    }
+
     /// Barra de pestañas: `●` si está sucia, cursiva si es «preview», tooltip con la ruta.
     fn tab_bar(&self) -> Element<'_, Message> {
         let mut bar = Row::new().spacing(4);
@@ -532,7 +578,14 @@ impl App {
         let theme = self.theme();
         let grid = pane_grid(&self.panes, |_, kind, _| {
             let body: Element<'_, Message> = match kind {
-                PaneKind::Explorer => explorer::view(&self.explorer, self.doc.path.as_deref()),
+                PaneKind::Explorer => Column::new()
+                    .spacing(6)
+                    .push(self.sidebar_switch())
+                    .push(match self.sidebar {
+                        Sidebar::Files => explorer::view(&self.explorer, self.doc.path.as_deref()),
+                        Sidebar::Outline => outline_panel::view(&self.outline),
+                    })
+                    .into(),
                 PaneKind::Editor => Column::new()
                     .spacing(6)
                     .push(self.tab_bar())

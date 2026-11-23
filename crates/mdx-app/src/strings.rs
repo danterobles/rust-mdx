@@ -66,3 +66,8 @@ pub const STATUS_RELOADED: &str = "Archivo recargado desde el disco";
 pub const STATUS_WATCH_FAILED: &str = "No se pudo vigilar la carpeta";
 
 pub const TAB_CLOSE: &str = "×";
+
+pub const SIDEBAR_FILES: &str = "Archivos";
+pub const SIDEBAR_OUTLINE: &str = "Esquema";
+pub const OUTLINE_EMPTY: &str = "Sin encabezados";
+pub const OUTLINE_BLANK_HEADING: &str = "(sin texto)";

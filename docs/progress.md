@@ -192,3 +192,15 @@ Decisiones:
 - ADR 0006 documenta el diseño «activo + aparcados» frente a `HashMap<DocumentId, Content>` de ARCHITECTURE.
 - `app.rs` (1 800 líneas) → `app/{mod,documents,editing,disk,explorer_ops,preview,tests}.rs`, sin cambios de comportamiento (commit `refactor(app)`).
 - Verificación 👁 AC1–AC3 confirmada manualmente por el propietario el 2026-11-23.
+
+## US-3.2 Outline — 🟡 implementada, pendiente verificación 👁 AC1 y AC2 (rama feat/us-3.2-outline)
+Plan: `mdx-core::outline` (`pulldown-cmark` + `into_offset_iter`), `mdx-app` (`outline.rs` panel, conmutador en `app/mod.rs`, `GoToLine` en `app/editing.rs`, cálculo junto al parseo de la vista previa).
+- AC1 👁 conmutador «Archivos | Esquema» en la cabecera del panel izquierdo (acordado con el propietario); lista de H1–H6 indentada 12 px por nivel; el esquema es el del documento activo (viaja con cada pestaña).
+- AC2 🧪/👁 clic → `Content::move_to` a (línea, 0) + un `Motion::Home` para que el editor desplace la vista hasta el cursor. Verificar a mano que el desplazamiento funciona en documentos largos.
+- AC3 🧪 extracción probada con tests y un snapshot `insta` (`snapshots/…realistic_document.snap`); se actualiza con el mismo debounce de la vista previa (150 ms).
+Decisiones:
+- Reconoce ATX y Setext; ignora los encabezados dentro de bloques de código y del bloque de metadatos YAML/TOML inicial; texto plano (negrita, énfasis, enlaces y código en línea sin marcas).
+- El esquema se calcula **siempre** en el mismo `spawn_blocking` del parseo (aunque la vista previa esté oculta); los elementos de la vista previa solo si está visible. La suscripción del debounce ya no depende de que la preview esté visible.
+- Un encabezado vacío se muestra como «(sin texto)».
+- Pendiente de decidir más adelante: marcar en el esquema el encabezado actual según el cursor (no está en el PRD).
+- `insta` entra en uso (versión 1.49 de STACK.md); `cargo insta review` no está instalado, los tests no lo necesitan.

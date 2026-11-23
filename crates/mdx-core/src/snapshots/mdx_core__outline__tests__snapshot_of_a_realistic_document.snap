@@ -1,0 +1,46 @@
+---
+source: crates/mdx-core/src/outline.rs
+expression: extract(text)
+---
+[
+    Heading {
+        level: 1,
+        text: "Mdx",
+        line: 0,
+    },
+    Heading {
+        level: 2,
+        text: "Instalación",
+        line: 4,
+    },
+    Heading {
+        level: 3,
+        text: "Requisitos",
+        line: 11,
+    },
+    Heading {
+        level: 2,
+        text: "Uso",
+        line: 15,
+    },
+    Heading {
+        level: 2,
+        text: "Título alternativo",
+        line: 17,
+    },
+    Heading {
+        level: 4,
+        text: "Detalle fino",
+        line: 20,
+    },
+    Heading {
+        level: 5,
+        text: "Nivel 5",
+        line: 22,
+    },
+    Heading {
+        level: 6,
+        text: "Nivel 6",
+        line: 23,
+    },
+]

@@ -112,9 +112,9 @@
 - [x] AC3 `●` y tooltip 👁
 
 ### US-3.2 Outline
-- [ ] AC1 Lista H1–H6 indentada 👁
-- [ ] AC2 Clic posiciona cursor 👁
-- [ ] AC3 Extracción con snapshots 🧪
+- [~] AC1 Lista H1–H6 indentada 👁 (🧪 `app::tests::sidebar_switches_*`, `each_tab_has_its_own_outline`; verificación visual pendiente)
+- [~] AC2 Clic posiciona cursor 👁 (🧪 `app::tests::clicking_a_heading_moves_the_cursor_to_its_line`; que la vista se desplace hasta la línea: 👁 pendiente)
+- [x] AC3 Extracción con snapshots 🧪 — `outline::tests::*` (snapshot `insta`), `app::tests::outline_is_empty_until_the_debounced_parse_arrives`, `outline_keeps_updating_when_the_preview_is_hidden`
 
 ### US-3.3 Scroll sincronizado
 - [ ] AC1 Sincronía editor→preview 👁

@@ -32,6 +32,19 @@ impl App {
         self.refresh_stats();
     }
 
+    /// Mueve el cursor al inicio de `line` (base 0) y lo deja visible (clic en el esquema).
+    pub(super) fn go_to_line(&mut self, line: usize) {
+        let line = line.min(self.content.line_count().saturating_sub(1));
+        self.last_edit_at = None;
+        self.content.move_to(text_editor::Cursor {
+            position: text_editor::Position { line, column: 0 },
+            selection: None,
+        });
+        // Una acción de movimiento hace que el editor desplace la vista hasta el cursor.
+        self.content
+            .perform(text_editor::Action::Move(text_editor::Motion::Home));
+    }
+
     pub(super) fn undo_redo(&mut self, undo: bool) {
         self.last_edit_at = None;
         let patch = if undo {
@@ -53,11 +66,8 @@ impl App {
         self.dirty = false;
         self.words = count_words(&self.doc.text);
         self.preview_pending = false;
-        if self.preview_visible {
-            self.start_preview_parse()
-        } else {
-            Task::none()
-        }
+        // Se parsea siempre: el esquema lo necesita aunque la vista previa esté oculta.
+        self.start_preview_parse()
     }
 
     pub(super) fn refresh_dirty(&mut self) {
