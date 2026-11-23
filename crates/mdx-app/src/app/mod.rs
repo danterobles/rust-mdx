@@ -64,6 +64,13 @@ impl markdown::Viewer<'_, String> for PreviewViewer {
     }
 }
 
+/// Qué pidió abrir la línea de comandos (`mdx <ruta>`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CliTarget {
+    Folder(PathBuf),
+    File(PathBuf),
+}
+
 /// Estado de la sesión persistente (US-3.5).
 pub struct SessionState {
     /// Rutas de `config.toml` y `session.toml` (`None` si no hay directorio personal).
@@ -72,8 +79,8 @@ pub struct SessionState {
     data: Session,
     /// La sesión anterior ya se leyó: antes de eso no se guarda (no pisarla a medio restaurar).
     ready: bool,
-    /// Se arrancó sin argumento: se restaura la última sesión.
-    restore: bool,
+    /// Argumento de la línea de comandos pendiente de abrir tras restaurar la sesión.
+    cli: Option<CliTarget>,
     /// Carpetas que estaban expandidas en la sesión, pendientes de abrir.
     pending_expand: Vec<PathBuf>,
 }
@@ -281,23 +288,38 @@ impl App {
         let mut tabs = Tabs::new();
         tabs.open_pinned(doc.id);
         let mut pin_on_load = None;
-        let restore_session = arg.is_none();
         let app_files = paths::app_files();
-        let session_boot = Self::boot_tasks(app_files.clone(), restore_session);
-        let cli_boot = match arg {
-            Some(path) if path.is_dir() => Task::perform(
-                workspace::open_async(path, filters),
-                Message::WorkspaceOpened,
+        let cli = arg.map(|path| {
+            if path.is_dir() {
+                CliTarget::Folder(path)
+            } else {
+                CliTarget::File(path)
+            }
+        });
+        // Con la sesión disponible se restaura primero y el argumento se abre después, encima.
+        // Sin directorio de estado no hay sesión: el argumento se abre de inmediato.
+        let session_boot = Self::boot_tasks(app_files.clone());
+        let (cli_boot, cli_pending) = match (app_files.is_some(), cli) {
+            (true, cli) => (Task::none(), cli),
+            (false, Some(CliTarget::Folder(path))) => (
+                Task::perform(
+                    workspace::open_async(path, filters),
+                    Message::WorkspaceOpened,
+                ),
+                None,
             ),
-            Some(path) => {
+            (false, Some(CliTarget::File(path))) => {
                 // Apertura explícita por CLI: la pestaña queda fijada.
                 pin_on_load = Some(path.clone());
-                Task::perform(
-                    async move { mdx_core::io::read_document(&path).await },
-                    Message::DocumentLoaded,
+                (
+                    Task::perform(
+                        async move { mdx_core::io::read_document(&path).await },
+                        Message::DocumentLoaded,
+                    ),
+                    None,
                 )
             }
-            None => Task::none(),
+            (false, None) => (Task::none(), None),
         };
         let boot = Task::batch([cli_boot, session_boot]);
         (
@@ -325,7 +347,7 @@ impl App {
                     files: app_files,
                     data: Session::default(),
                     ready: false,
-                    restore: restore_session,
+                    cli: cli_pending,
                     pending_expand: Vec::new(),
                 },
                 autosave_inflight: std::collections::HashSet::new(),

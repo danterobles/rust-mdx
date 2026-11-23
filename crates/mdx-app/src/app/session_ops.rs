@@ -9,7 +9,7 @@ use mdx_core::paths::AppFiles;
 use mdx_core::session::{Boot, Layout, Session};
 use mdx_core::workspace::{self, Children, FileNode, NodeKind};
 
-use super::{App, DiskState, DocumentId, Message, strings};
+use super::{App, CliTarget, DiskState, DocumentId, Message, strings};
 use crate::layout;
 
 /// Lo que, si cambia, obliga a guardar la sesión (no incluye los anchos de panel: se guardan con
@@ -47,7 +47,7 @@ fn expanded_dirs(node: &FileNode, out: &mut Vec<PathBuf>) {
 
 impl App {
     /// Tareas de arranque: configuración y sesión (esta última, restaurada solo sin argumento).
-    pub(super) fn boot_tasks(files: Option<AppFiles>, restore: bool) -> Task<Message> {
+    pub(super) fn boot_tasks(files: Option<AppFiles>) -> Task<Message> {
         let Some(files) = files else {
             return Task::none();
         };
@@ -58,7 +58,7 @@ impl App {
             Message::ConfigLoaded,
         );
         let session = Task::perform(
-            async move { Session::boot(&session_file, restore).await },
+            async move { Session::boot(&session_file, true).await },
             |boot| Message::SessionBooted(Box::new(boot)),
         );
         Task::batch([config, session])
@@ -99,29 +99,39 @@ impl App {
         if unusable {
             self.set_status(strings::SESSION_UNUSABLE.to_owned(), true);
         }
-        if self.sess.restore {
-            let layout = self.sess.data.layout;
-            layout::apply_ratios(
-                &mut self.panes,
-                layout.explorer_ratio,
-                layout.inner_editor_ratio(),
-            );
-            if let Some(root) = plan.workspace {
-                self.sess.pending_expand = plan.expanded_dirs;
-                tasks.push(Task::perform(
-                    workspace::open_async(root, self.explorer.filters),
-                    Message::WorkspaceOpened,
-                ));
-            }
-            // Orden de pestañas = orden guardado; todas fijas (las abrió el usuario).
-            for doc in documents {
-                tasks.push(self.add_doc(doc, true));
-            }
-            if let Some(active) = plan.active
-                && let Some(id) = self.find_open(&active)
-            {
-                tasks.push(self.select_tab(id));
-            }
+        let cli = self.sess.cli.take();
+        let layout = self.sess.data.layout;
+        layout::apply_ratios(
+            &mut self.panes,
+            layout.explorer_ratio,
+            layout.inner_editor_ratio(),
+        );
+        // Una carpeta pedida por la línea de comandos sustituye a la de la sesión (y a sus
+        // carpetas expandidas); un archivo se suma a lo restaurado.
+        if let Some(CliTarget::Folder(root)) = &cli {
+            tasks.push(Task::perform(
+                workspace::open_async(root.clone(), self.explorer.filters),
+                Message::WorkspaceOpened,
+            ));
+        } else if let Some(root) = plan.workspace {
+            self.sess.pending_expand = plan.expanded_dirs;
+            tasks.push(Task::perform(
+                workspace::open_async(root, self.explorer.filters),
+                Message::WorkspaceOpened,
+            ));
+        }
+        // Orden de pestañas = orden guardado; todas fijas (las abrió el usuario).
+        for doc in documents {
+            tasks.push(self.add_doc(doc, true));
+        }
+        if let Some(active) = plan.active
+            && let Some(id) = self.find_open(&active)
+        {
+            tasks.push(self.select_tab(id));
+        }
+        // El archivo del argumento queda abierto y activo por encima de lo restaurado.
+        if let Some(CliTarget::File(path)) = cli {
+            tasks.push(self.open_path(path, true));
         }
         Task::batch(tasks)
     }

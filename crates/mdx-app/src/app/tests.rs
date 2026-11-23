@@ -1710,7 +1710,6 @@ fn doc_at(path: &str, text: &str) -> Document {
 fn restoring_a_session_reopens_tabs_in_order_with_the_saved_active_tab_and_panes() {
     // AC3
     let (mut app, _) = App::new(None);
-    assert!(app.sess.restore);
     let session = Session {
         layout: mdx_core::session::Layout {
             explorer_ratio: 0.3,
@@ -1745,26 +1744,75 @@ fn restoring_a_session_reopens_tabs_in_order_with_the_saved_active_tab_and_panes
     assert!((inner.unwrap() - 0.35 / 0.7).abs() < 1e-3);
 }
 
-#[test]
-fn a_session_is_not_restored_when_the_app_starts_with_an_argument() {
-    // AC3: «al abrir sin argumentos».
-    let (mut app, _) = App::new(Some(PathBuf::from("/p/otro.md")));
-    assert!(!app.sess.restore);
-    let plan = RestorePlan {
-        files: vec![PathBuf::from("/p/a.md")],
+fn saved_plan() -> RestorePlan {
+    RestorePlan {
+        files: vec![PathBuf::from("/p/a.md"), PathBuf::from("/p/b.md")],
         active: Some(PathBuf::from("/p/a.md")),
         ..RestorePlan::default()
+    }
+}
+
+fn saved_docs() -> Vec<Document> {
+    vec![doc_at("/p/a.md", "A"), doc_at("/p/b.md", "B")]
+}
+
+/// `App::new` con un argumento: solo difiere del arranque normal si hay directorio de estado.
+fn app_with_cli(arg: &str) -> App {
+    let (mut app, _) = App::new(Some(PathBuf::from(arg)));
+    app.sess.files = Some(mdx_core::paths::AppFiles {
+        config_file: PathBuf::from("/x/config.toml"),
+        session_file: PathBuf::from("/x/session.toml"),
+    });
+    app.sess.cli = Some(CliTarget::File(PathBuf::from(arg)));
+    app
+}
+
+#[test]
+fn a_cli_file_is_added_on_top_of_the_restored_session_and_becomes_active() {
+    // AC3 (decisión del propietario): con argumento también se restaura la sesión.
+    let mut app = app_with_cli("/p/nuevo.md");
+    boot_with(&mut app, Session::default(), saved_plan(), saved_docs());
+    assert_eq!(tab_names(&app), ["a.md", "b.md"], "primero lo restaurado");
+    assert!(app.sess.cli.is_none(), "el argumento ya se consumió");
+    // El archivo del argumento llega después de leerse y queda activo.
+    let _ = app.update(Message::DocumentLoaded(Ok(doc_at("/p/nuevo.md", "N"))));
+    assert_eq!(tab_names(&app), ["a.md", "b.md", "nuevo.md"]);
+    assert_eq!(app.doc.path.as_deref(), Some(Path::new("/p/nuevo.md")));
+}
+
+#[test]
+fn a_cli_file_already_in_the_session_just_becomes_the_active_tab() {
+    let mut app = app_with_cli("/p/b.md");
+    boot_with(&mut app, Session::default(), saved_plan(), saved_docs());
+    assert_eq!(tab_names(&app), ["a.md", "b.md"], "sin duplicados");
+    assert_eq!(app.doc.path.as_deref(), Some(Path::new("/p/b.md")));
+}
+
+#[test]
+fn a_cli_folder_replaces_the_session_workspace() {
+    let (mut app, _) = App::new(None);
+    app.sess.cli = Some(CliTarget::Folder(PathBuf::from("/otra")));
+    let plan = RestorePlan {
+        workspace: Some(PathBuf::from("/guardada")),
+        expanded_dirs: vec![PathBuf::from("/guardada/docs")],
+        ..RestorePlan::default()
     };
+    boot_with(&mut app, Session::default(), plan, Vec::new());
+    assert!(
+        app.sess.pending_expand.is_empty(),
+        "no se expanden carpetas de otra carpeta"
+    );
+    assert!(app.sess.cli.is_none());
+}
+
+#[test]
+fn a_session_without_cli_still_restores_everything() {
+    let (mut app, _) = App::new(None);
     let mut session = Session::default();
     session.recent.files = vec![PathBuf::from("/p/a.md")];
-    boot_with(&mut app, session, plan, vec![doc_at("/p/a.md", "A")]);
-    assert_eq!(app.tabs.tabs().len(), 1, "no se reabre nada");
-    assert!(app.find_open(Path::new("/p/a.md")).is_none());
-    assert_eq!(
-        app.sess.data.recent.files,
-        [PathBuf::from("/p/a.md")],
-        "pero sí los recientes"
-    );
+    boot_with(&mut app, session, saved_plan(), saved_docs());
+    assert_eq!(tab_names(&app), ["a.md", "b.md"]);
+    assert_eq!(app.sess.data.recent.files, [PathBuf::from("/p/a.md")]);
 }
 
 #[test]

@@ -11,7 +11,7 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 ## [Unreleased]
 
 ### Added
-- Sesión: al cerrar (y al abrir o cerrar pestañas o carpetas) se guarda la carpeta, las pestañas abiertas, la pestaña activa, las carpetas expandidas y el tamaño de los paneles; al abrir sin argumentos se restaura, omitiendo lo que ya no existe [US-3.5]
+- Sesión: al cerrar (y al abrir o cerrar pestañas o carpetas) se guarda la carpeta, las pestañas abiertas, la pestaña activa, las carpetas expandidas y el tamaño de los paneles; al abrir Mdx se restaura (también con `mdx <ruta>`, que además abre ese archivo o carpeta), omitiendo lo que ya no existe [US-3.5]
 - «Recientes»: las últimas 10 carpetas y 10 archivos abiertos, en el panel de archivos cuando no hay carpeta abierta [US-3.5]
 - Autoguardado opcional (desactivado por defecto): se activa con `[files] autosave = true` en `config.toml` y guarda tras 2 s sin escribir (`autosave_delay_ms`), solo documentos con ruta y sin conflicto con el disco [US-3.5]
 - Buscar en el documento (Ctrl/Cmd+F) y reemplazar uno o todos (Ctrl+H; Cmd+Opt+F en macOS), con opciones de mayúsculas, palabra completa y expresiones regulares (con `$1` en el reemplazo); «reemplazar todo» se deshace de una vez [US-3.4]
