@@ -131,7 +131,7 @@
 - [x] AC3 Restauración con rutas faltantes 🧪 (INV-5), también al abrir con argumento (decisión del propietario) — `session::tests::missing_paths_skipped`, `boot_restores_existing_files_in_order_*`, `app::tests::restoring_a_session_*`, `expanded_directories_from_the_session_*`
 - [x] AC4 Recientes (máx. 10) 🧪 — `session::tests::recents_are_most_recent_first_*`, `app::tests::opening_files_and_folders_feeds_the_recents_list`, `recents_are_capped_at_ten_files`
 
-- [ ] **Hito F3**: sesión de trabajo completa con varias pestañas y búsqueda 👁
+- [~] **Hito F3**: sesión de trabajo completa con varias pestañas y búsqueda 👁 (cada historia US-3.1…3.5 verificada a mano por el propietario; el recorrido completo de una sola sesión queda pendiente)
 
 ## Fase 4 — Pulido → v0.5.0
 
