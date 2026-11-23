@@ -316,3 +316,12 @@ Decisiones y límites:
 - Linux: `arboard` puede requerir su backend Wayland/X11; a verificar en el QA de F5.
 - Solo se pega la **primera** imagen/captura del portapapeles; archivos copiados desde el Finder (rutas) no se interpretan como imagen.
 - Verificación 👁 AC1 y AC2 confirmada manualmente por el propietario el 2026-11-23.
+
+## Cierre de F4 → v0.5.0 (2026-11-23)
+- Historias F4: US-4.1 (temas), US-4.2 (configuración), US-4.3 (exportar HTML), US-4.4 (imágenes) y US-4.5 (zoom) completas, con sus AC verificados.
+- Hito F4 en `[~]`: verificadas las cinco historias por separado; falta el uso diario con una configuración personalizada.
+- La F4 no exige medir NFR (tabla en F1, F3 y F5). Dato informativo: binario release **13,31 MB** (NFR-1 < 15 MB; +0,9 MB por `comrak`, `arboard` e `image`; quedan 1,7 MB de margen).
+- Pendiente sin decidir: **NFR-3** (176 MB con un archivo de 100 KB frente a < 80 MB); recomendado decidir antes de la F5, donde se vuelve a exigir.
+- Siguen abiertos de fases anteriores: Hito F1 y F3 (👁), comprobaciones visuales de NFR-2/3/4; CI remoto sin ejecutar (AC2 de US-0.1); licencia y URL del repositorio en `TBD`.
+- Linux y Windows siguen sin probarse (watcher, papelera, «revelar», portapapeles de imágenes, atajos).
+- Tags `v0.2.0`…`v0.5.0`: **no creados**; requieren autorización explícita.
