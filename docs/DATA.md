@@ -336,6 +336,7 @@ pub enum CoreError {
     #[error("Ya existe: {0}")]                       AlreadyExists(PathBuf),
     #[error("Error de configuración: {0}")]          Config(String),
     #[error("Error de E/S: {0}")]                    Io(String),
+    #[error("Patrón de búsqueda inválido: {0}")]     InvalidPattern(String),
 }
 ```
 

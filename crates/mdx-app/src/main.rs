@@ -6,6 +6,7 @@ mod explorer;
 mod layout;
 mod outline;
 mod preview_sync;
+mod search;
 mod shortcuts;
 mod state;
 mod statusbar;

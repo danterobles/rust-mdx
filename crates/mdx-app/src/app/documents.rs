@@ -147,6 +147,7 @@ impl App {
         self.tabs.set_active(id);
         // Las medidas de la vista previa eran del documento anterior: se vuelve a medir.
         self.preview_layout = Layout::default();
+        self.refresh_find_matches();
         self.measure_preview()
     }
 
@@ -225,6 +226,7 @@ impl App {
         if let Some(next) = next {
             self.put_active(next);
             self.preview_layout = Layout::default();
+            self.refresh_find_matches();
             return self.measure_preview();
         }
         let doc = Document::untitled();

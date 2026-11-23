@@ -37,6 +37,8 @@ impl App {
             .record(&old, &self.doc.text, before, after, mergeable);
         self.last_edit_at = editor::is_mergeable(&action).then(Instant::now);
         self.refresh_stats();
+        // Con la barra de búsqueda abierta, las coincidencias siguen al texto.
+        self.refresh_find_matches();
         // Escribir puede desplazar el editor hasta el cursor.
         self.update_view_top()
     }
@@ -76,6 +78,7 @@ impl App {
         self.dirty = false;
         self.words = count_words(&self.doc.text);
         self.preview_pending = false;
+        self.refresh_find_matches();
         // Se parsea siempre: el esquema lo necesita aunque la vista previa esté oculta.
         self.start_preview_parse()
     }
@@ -129,12 +132,20 @@ impl App {
                     .take()
                     .is_some_and(|p| doc.path.as_deref() == Some(p.as_path()));
                 let name = doc.display_name(strings::UNTITLED);
+                let opened_path = doc.path.clone();
                 let task = self.add_doc(doc, pinned);
                 self.set_status(format!("{}: {name}", strings::STATUS_OPENED), false);
-                task
+                // Resultado de la búsqueda en carpeta: posicionar el editor en la coincidencia.
+                match self.pending_goto.take() {
+                    Some((path, line, cols)) if opened_path.as_deref() == Some(path.as_path()) => {
+                        Task::batch([task, self.goto_match(line, &cols)])
+                    }
+                    _ => task,
+                }
             }
             // AC7 (US-1.1): el archivo no se abre y los documentos abiertos quedan intactos.
             Err(err) => {
+                self.pending_goto = None;
                 self.set_status(err.to_string(), true);
                 Task::none()
             }

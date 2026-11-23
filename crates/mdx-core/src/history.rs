@@ -73,6 +73,20 @@ pub fn offset_to_pos(text: &str, offset: usize) -> Pos {
     (line, col)
 }
 
+/// Convierte `(línea, columna en bytes)` en un offset en bytes dentro de `text`.
+/// Si la posición excede el texto, devuelve el final.
+#[must_use]
+pub fn pos_to_offset(text: &str, (line, col): Pos) -> usize {
+    let mut offset = 0;
+    for (i, l) in text.split('\n').enumerate() {
+        if i == line {
+            return offset + col.min(l.len());
+        }
+        offset += l.len() + 1;
+    }
+    text.len()
+}
+
 impl History {
     #[must_use]
     pub fn new() -> Self {
@@ -292,6 +306,20 @@ mod tests {
         assert_eq!(offset_to_pos("ab\ncdé\nf", 3), (1, 0));
         assert_eq!(offset_to_pos("ab\ncdé\nf", 7), (1, 4));
         assert_eq!(offset_to_pos("ab\ncdé\nf", 8), (2, 0));
+    }
+
+    #[test]
+    fn pos_to_offset_is_the_inverse_of_offset_to_pos() {
+        let text = "ab\ncdé\nf";
+        for offset in [0, 1, 2, 3, 5, 7, 8, 9] {
+            assert_eq!(pos_to_offset(text, offset_to_pos(text, offset)), offset);
+        }
+        assert_eq!(pos_to_offset(text, (99, 0)), text.len());
+        assert_eq!(
+            pos_to_offset(text, (0, 99)),
+            2,
+            "la columna se acota a la línea"
+        );
     }
 
     #[test]

@@ -218,3 +218,16 @@ Decisiones y límites:
 - Con documentos muy grandes (`large_5mb.md`) el recorrido del árbol tras cada parseo puede notarse: medir en el cierre de F3 (NFR-4).
 - `PreviewViewer` mínimo propio (solo enlace → mensaje); el resto del aspecto es el predeterminado de iced.
 - Verificación 👁 AC1 y AC2 confirmada manualmente por el propietario el 2026-11-23.
+
+## US-3.4 Buscar y reemplazar — 🟡 implementada, pendiente verificación 👁 AC1 y AC3 (rama feat/us-3.4-buscar-reemplazar)
+Plan: `mdx-core::search` (`SearchQuery`, `find_all`, `replace_all`, `replacement_for`, `search_workspace`), `mdx-app` (`search.rs` vistas, `app/search_ops.rs`, atajos), `history::pos_to_offset`, `CoreError::InvalidPattern`.
+- AC1 🧪/👁 Ctrl/Cmd+F abre la barra sobre el editor (campo enfocado, prellena con la selección de una línea); Ctrl+H abre también el campo de reemplazo (**en macOS Cmd+Opt+F**, porque Cmd+H es «ocultar» del sistema, según PRD §10). Buscar selecciona la coincidencia en el editor; ↑/↓ (o Enter) navegan con vuelta al principio/final; contador «2 de 5»; Esc cierra. «Reemplazar» sustituye la actual y salta a la siguiente; «Reemplazar todo» lo hace en **un solo paso de deshacer**. Reemplazos como ediciones normales (historial, `●`, vista previa).
+- AC2 🧪 distinguir mayúsculas, palabra completa (`\b`) y regex; en modo regex el reemplazo admite `$1`/`$nombre`; en modo literal `$` no se interpreta. Un regex inválido muestra el motivo en rojo y no hay coincidencias. Las coincidencias vacías (p. ej. `x*`) se ignoran.
+- AC3 🧪/👁 Ctrl/Cmd+Shift+F muestra la pestaña «Buscar» del panel izquierdo; se lanza con Enter o el botón, en `spawn_blocking` y es **cancelable** (flag atómico que se comprueba entre archivos y cada 1 024 líneas); una búsqueda nueva cancela la anterior y se descartan las respuestas viejas por generación. Resultados agrupados por archivo (ruta relativa) con «línea: extracto»; clic → abre el archivo (o activa su pestaña) y selecciona la coincidencia.
+Decisiones y límites:
+- Se buscan archivos Markdown (`md`, `markdown`, `mdown`, `mkd`) y `txt`; se respeta `.gitignore` y se omiten ocultos, no-UTF-8 y archivos > 8 MB. Máximo 5 000 coincidencias (aviso «hay más»).
+- La búsqueda en carpeta lee **del disco**, no de los cambios sin guardar de las pestañas.
+- En el documento el regex puede abarcar varias líneas (`(?m)`); en la carpeta se busca línea a línea.
+- Las coincidencias del documento se recalculan al escribir, cambiar de pestaña o abrir/recargar un documento mientras la barra está abierta (O(n) por pulsación; medir en NFR-4).
+- Sin resaltado de **todas** las coincidencias en el texto (el `text_editor` de iced no permite pintar rangos arbitrarios): solo se selecciona la actual y la barra muestra el contador.
+- Reemplazar todo pega el texto completo en una operación (`Edit::Paste`): con documentos de varios MB puede tardar.

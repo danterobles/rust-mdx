@@ -11,6 +11,8 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 ## [Unreleased]
 
 ### Added
+- Buscar en el documento (Ctrl/Cmd+F) y reemplazar uno o todos (Ctrl+H; Cmd+Opt+F en macOS), con opciones de mayúsculas, palabra completa y expresiones regulares (con `$1` en el reemplazo); «reemplazar todo» se deshace de una vez [US-3.4]
+- Buscar en toda la carpeta (Ctrl/Cmd+Shift+F): resultados agrupados por archivo con número de línea, cancelables; un clic abre el archivo y selecciona la coincidencia. Respeta `.gitignore` [US-3.4]
 - Scroll sincronizado: al desplazar o escribir en el editor, la vista previa se posiciona en el bloque correspondiente; se puede desactivar con la casilla «Sincronizar scroll con el editor» [US-3.3]
 - Panel «Esquema» (conmutador junto a «Archivos»): lista de encabezados H1–H6 del documento activo, indentados por nivel; un clic lleva el cursor a esa línea [US-3.2]
 - Pestañas: varios documentos abiertos a la vez, con `●` si tienen cambios, cursiva en la pestaña de vista previa y la ruta completa al pasar el ratón [US-3.1]

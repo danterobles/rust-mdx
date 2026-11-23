@@ -5,6 +5,7 @@ mod documents;
 mod editing;
 mod explorer_ops;
 mod preview;
+mod search_ops;
 mod sync;
 #[cfg(test)]
 mod tests;
@@ -31,6 +32,7 @@ use mdx_core::history::History;
 use mdx_core::io::SavedInfo;
 use mdx_core::link::{self, LinkTarget};
 use mdx_core::outline::{Block, Outline};
+use mdx_core::search::WorkspaceSearch;
 use mdx_core::watcher::{self, FsEvent};
 use mdx_core::workspace::{self, FileNode, TreeFilters, Workspace};
 use mdx_core::{CoreError, DiskState, Document, DocumentId};
@@ -43,6 +45,7 @@ use crate::explorer::{
 use crate::layout::{PaneKind, initial_panes, panes_without_preview};
 use crate::outline as outline_panel;
 use crate::preview_sync::{self, Layout};
+use crate::search::{self as search_ui, FindOption, FindState, WorkspaceSearchState};
 use crate::shortcuts::{self, ShortcutAction};
 use crate::state::tabs::Tabs;
 use crate::statusbar::{Stats, display_col};
@@ -76,6 +79,10 @@ pub struct App {
     external: Option<Document>,
     /// Ruta cuyo doble clic (o apertura explícita) llegó mientras se cargaba: queda fijada.
     pin_on_load: Option<PathBuf>,
+    /// Tras abrir este archivo, posicionar el editor en (línea, columnas) del resultado.
+    pending_goto: Option<(PathBuf, usize, std::ops::Range<usize>)>,
+    find: FindState,
+    ws_search: WorkspaceSearchState,
     panes: pane_grid::State<PaneKind>,
     doc: Document,
     content: text_editor::Content,
@@ -151,6 +158,7 @@ pub enum SyncScroll {
 pub enum Sidebar {
     Files,
     Outline,
+    Search,
 }
 
 /// Resultado del parseo en segundo plano de un documento.
@@ -215,6 +223,21 @@ pub enum Message {
     LayoutChanged,
     SetSidebar(Sidebar),
     GoToLine(usize),
+    FindQueryChanged(String),
+    ReplaceChanged(String),
+    FindOptionToggled(FindOption),
+    FindNext,
+    FindPrev,
+    ReplaceOne,
+    ReplaceAll,
+    FindClose,
+    EscapePressed,
+    WsQueryChanged(String),
+    WsOptionToggled(FindOption),
+    WsSearch,
+    WsCancel,
+    WsDone(u64, Result<WorkspaceSearch, CoreError>),
+    OpenResult(PathBuf, usize, std::ops::Range<usize>),
     LinkClicked(String),
     LinkOpened(Result<(), String>),
 }
@@ -262,6 +285,9 @@ impl App {
                 tabs,
                 parked: Parked::new(),
                 pin_on_load,
+                pending_goto: None,
+                find: FindState::default(),
+                ws_search: WorkspaceSearchState::default(),
                 external: None,
                 panes: initial_panes(),
                 doc,
@@ -322,6 +348,13 @@ impl App {
                     }),
                 _ => None,
             }),
+            event::listen_with(|event, _status, _window| match event {
+                Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                    ..
+                }) => Some(Message::EscapePressed),
+                _ => None,
+            }),
             window::close_requests().map(|_| Message::CloseRequested),
             self.watch_subscriptions(),
             window::resize_events().map(|_| Message::LayoutChanged),
@@ -375,6 +408,26 @@ impl App {
             | Message::PreviewParsed(..)
             | Message::PreviewMeasured(..)
             | Message::SetSyncScroll(_)) => self.update_preview(m),
+            Message::EscapePressed => {
+                if self.find.open {
+                    self.close_find();
+                }
+                Task::none()
+            }
+            m @ (Message::FindQueryChanged(_)
+            | Message::ReplaceChanged(_)
+            | Message::FindOptionToggled(_)
+            | Message::FindNext
+            | Message::FindPrev
+            | Message::ReplaceOne
+            | Message::ReplaceAll
+            | Message::FindClose
+            | Message::WsQueryChanged(_)
+            | Message::WsOptionToggled(_)
+            | Message::WsSearch
+            | Message::WsCancel
+            | Message::WsDone(..)
+            | Message::OpenResult(..)) => self.update_search(m),
             m @ (Message::FolderPicked(Some(_))
             | Message::WorkspaceOpened(_)
             | Message::ToggleDir(_)
@@ -423,6 +476,9 @@ impl App {
                 Task::none()
             }
             ShortcutAction::TogglePreview => self.toggle_preview(),
+            ShortcutAction::Find => self.open_find(false),
+            ShortcutAction::Replace => self.open_find(true),
+            ShortcutAction::FindInWorkspace => self.open_workspace_search(),
         }
     }
 
@@ -526,6 +582,7 @@ impl App {
             .spacing(4)
             .push(tab(strings::SIDEBAR_FILES, Sidebar::Files))
             .push(tab(strings::SIDEBAR_OUTLINE, Sidebar::Outline))
+            .push(tab(strings::SIDEBAR_SEARCH, Sidebar::Search))
             .into()
     }
 
@@ -594,11 +651,16 @@ impl App {
                     .push(match self.sidebar {
                         Sidebar::Files => explorer::view(&self.explorer, self.doc.path.as_deref()),
                         Sidebar::Outline => outline_panel::view(&self.outline),
+                        Sidebar::Search => search_ui::workspace_panel(
+                            &self.ws_search,
+                            self.explorer.workspace.as_ref().map(|ws| ws.root.as_path()),
+                        ),
                     })
                     .into(),
                 PaneKind::Editor => Column::new()
                     .spacing(6)
                     .push(self.tab_bar())
+                    .extend(self.find.open.then(|| search_ui::find_bar(&self.find)))
                     .push(
                         text_editor(&self.content)
                             .on_action(Message::Edit)
