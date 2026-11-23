@@ -1,14 +1,21 @@
 //! Estado, mensajes, `update` y `view` de la aplicación (arquitectura Elm).
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
-use iced::widget::{Column, container, pane_grid, text, text_editor};
-use iced::{Element, Event, Length, Subscription, Task, Theme, event, keyboard, window};
+use iced::widget::{Column, Row, container, pane_grid, text, text_editor};
+use iced::{
+    Element, Event, Font, Length, Subscription, Task, Theme, event, highlighter, keyboard, window,
+};
+use mdx_core::document::count_words;
+use mdx_core::history::History;
 use mdx_core::io::SavedInfo;
 use mdx_core::{CoreError, Document};
 
+use crate::editor;
 use crate::layout::{PaneKind, initial_panes};
 use crate::shortcuts::{self, ShortcutAction};
+use crate::statusbar::{Stats, display_col};
 use crate::strings;
 
 pub struct App {
@@ -20,7 +27,14 @@ pub struct App {
     dirty: bool,
     /// Acción a ejecutar cuando termine el guardado en curso (cierre, nuevo, abrir).
     after_save: Option<PendingAction>,
+    history: History,
+    /// Instante de la última edición fusionable; `None` corta la ráfaga actual.
+    last_edit_at: Option<Instant>,
+    words: usize,
 }
+
+/// Tiempo máximo entre pulsaciones para que cuenten como un solo paso de deshacer.
+const MERGE_WINDOW: Duration = Duration::from_millis(1000);
 
 /// Acciones que descartarían el documento actual; se protegen si hay cambios sin guardar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,6 +80,9 @@ impl App {
                 status: None,
                 dirty: false,
                 after_save: None,
+                history: History::new(),
+                last_edit_at: None,
+                words: 0,
             },
             Task::none(),
         )
@@ -110,11 +127,7 @@ impl App {
                 Task::none()
             }
             Message::Edit(action) => {
-                let is_edit = action.is_edit();
-                self.content.perform(action);
-                if is_edit {
-                    self.refresh_dirty();
-                }
+                self.handle_edit(action);
                 Task::none()
             }
             Message::Shortcut(action) => self.handle_shortcut(action),
@@ -151,6 +164,14 @@ impl App {
             ShortcutAction::Open => self.request(PendingAction::Open),
             ShortcutAction::Save => self.save(),
             ShortcutAction::SaveAs => self.save_as(),
+            ShortcutAction::Undo => {
+                self.undo_redo(true);
+                Task::none()
+            }
+            ShortcutAction::Redo => {
+                self.undo_redo(false);
+                Task::none()
+            }
         }
     }
 
@@ -178,7 +199,7 @@ impl App {
             PendingAction::New => {
                 self.doc = Document::untitled();
                 self.content = text_editor::Content::new();
-                self.dirty = false;
+                self.reset_editing_state();
                 self.set_status(strings::STATUS_NEW.to_owned(), false);
                 Task::none()
             }
@@ -186,9 +207,61 @@ impl App {
         }
     }
 
+    fn handle_edit(&mut self, action: text_editor::Action) {
+        if !action.is_edit() {
+            // Mover el cursor o seleccionar corta la ráfaga de tecleo (el scroll no).
+            if !matches!(action, text_editor::Action::Scroll { .. }) {
+                self.last_edit_at = None;
+            }
+            self.content.perform(action);
+            return;
+        }
+        let before = editor::cursor_pos(&self.content);
+        let mergeable = editor::is_mergeable(&action)
+            && self
+                .last_edit_at
+                .is_some_and(|t| t.elapsed() < MERGE_WINDOW);
+        self.content.perform(action.clone());
+        let old = std::mem::take(&mut self.doc.text);
+        let after = editor::cursor_pos(&self.content);
+        self.doc.text = self.content.text();
+        self.history
+            .record(&old, &self.doc.text, before, after, mergeable);
+        self.last_edit_at = editor::is_mergeable(&action).then(Instant::now);
+        self.refresh_stats();
+    }
+
+    fn undo_redo(&mut self, undo: bool) {
+        self.last_edit_at = None;
+        let patch = if undo {
+            self.history.undo(&self.doc.text)
+        } else {
+            self.history.redo(&self.doc.text)
+        };
+        if let Some(patch) = patch {
+            editor::apply_patch(&mut self.content, &self.doc.text, &patch);
+            self.refresh_dirty();
+        }
+    }
+
+    /// Sincroniza `doc.text` con el editor y recalcula dirty y palabras.
+    /// Tras abrir o crear un documento: sin historial ni ráfaga activa.
+    fn reset_editing_state(&mut self) {
+        self.history.clear();
+        self.last_edit_at = None;
+        self.dirty = false;
+        self.words = count_words(&self.doc.text);
+    }
+
     fn refresh_dirty(&mut self) {
         self.doc.text = self.content.text();
+        self.refresh_stats();
+    }
+
+    /// Recalcula dirty y palabras a partir de `doc.text` (ya sincronizado con el editor).
+    fn refresh_stats(&mut self) {
         self.dirty = self.doc.is_dirty();
+        self.words = count_words(&self.doc.text);
     }
 
     fn save_as(&self) -> Task<Message> {
@@ -217,7 +290,7 @@ impl App {
                 self.content = text_editor::Content::with_text(&doc.text);
                 let name = doc.display_name(strings::UNTITLED);
                 self.doc = doc;
-                self.dirty = false;
+                self.reset_editing_state();
                 self.set_status(format!("{}: {name}", strings::STATUS_OPENED), false);
             }
             // AC7 (US-1.1): el archivo no se abre y el documento actual queda intacto.
@@ -248,6 +321,21 @@ impl App {
         }
     }
 
+    fn stats(&self) -> Stats {
+        let (line, byte_col) = editor::cursor_pos(&self.content);
+        let col = self
+            .content
+            .line(line)
+            .map_or(1, |l| display_col(&l.text, byte_col));
+        Stats {
+            line: line + 1,
+            col,
+            words: self.words,
+            line_ending: self.doc.line_ending,
+            has_bom: self.doc.has_bom,
+        }
+    }
+
     fn set_status(&mut self, text: String, is_error: bool) {
         self.status = Some(Status { text, is_error });
     }
@@ -258,6 +346,9 @@ impl App {
                 PaneKind::Explorer => text(strings::PANE_EXPLORER).into(),
                 PaneKind::Editor => text_editor(&self.content)
                     .on_action(Message::Edit)
+                    .key_binding(editor::key_binding)
+                    .font(Font::MONOSPACE)
+                    .highlight("markdown", highlighter::Theme::InspiredGitHub)
                     .height(Length::Fill)
                     .into(),
                 PaneKind::Preview => text(strings::PANE_PREVIEW).into(),
@@ -277,10 +368,16 @@ impl App {
             Some(s) => text(&s.text).into(),
             None => text("").into(),
         };
-        let status_bar = container(status)
-            .padding([4, 8])
-            .width(Length::Fill)
-            .style(container::bordered_box);
+        let status_bar = container(
+            Row::new().push(status).push(
+                container(text(self.stats().render()))
+                    .width(Length::Fill)
+                    .align_right(Length::Fill),
+            ),
+        )
+        .padding([4, 8])
+        .width(Length::Fill)
+        .style(container::bordered_box);
 
         Column::new().push(grid).push(status_bar).into()
     }
@@ -394,6 +491,65 @@ mod tests {
         ));
         assert_eq!(app.content.text(), "");
         assert_eq!(app.title(), "Sin título — Mdx");
+    }
+
+    #[test]
+    fn undo_and_redo_typing_burst() {
+        // AC3: una ráfaga de tecleo es un solo paso.
+        let (mut app, _) = App::new();
+        for c in "hola".chars() {
+            type_char(&mut app, c);
+        }
+        let _ = app.update(Message::Shortcut(ShortcutAction::Undo));
+        assert_eq!(app.content.text(), "");
+        assert_eq!(app.title(), "Sin título — Mdx");
+        let _ = app.update(Message::Shortcut(ShortcutAction::Redo));
+        assert_eq!(app.content.text(), "hola");
+        assert_eq!(app.title(), "● Sin título — Mdx");
+    }
+
+    #[test]
+    fn undo_restores_cursor_and_edit_after_undo_drops_redo() {
+        let (mut app, _) = App::new();
+        for c in "ab".chars() {
+            type_char(&mut app, c);
+        }
+        let _ = app.update(Message::Edit(Action::Edit(Edit::Enter)));
+        type_char(&mut app, 'c');
+        let _ = app.update(Message::Shortcut(ShortcutAction::Undo));
+        assert_eq!(app.content.text(), "ab\n");
+        let _ = app.update(Message::Shortcut(ShortcutAction::Undo));
+        assert_eq!(app.content.text(), "ab");
+        assert_eq!(editor::cursor_pos(&app.content), (0, 2));
+        type_char(&mut app, 'z');
+        let _ = app.update(Message::Shortcut(ShortcutAction::Redo));
+        assert_eq!(app.content.text(), "abz");
+    }
+
+    #[test]
+    fn indent_and_unindent_selection() {
+        // AC4: con la línea seleccionada, Tab la indenta y Shift+Tab la desindenta.
+        let (mut app, _) = App::new();
+        type_char(&mut app, 'a');
+        let _ = app.update(Message::Edit(Action::SelectAll));
+        let _ = app.update(Message::Edit(Action::Edit(Edit::Indent)));
+        let indented = app.content.text();
+        assert!(indented.ends_with('a') && indented.len() > 1 && indented.trim() == "a");
+        let _ = app.update(Message::Edit(Action::Edit(Edit::Unindent)));
+        assert_eq!(app.content.text(), "a");
+    }
+
+    #[test]
+    fn stats_follow_cursor_and_words() {
+        // AC5
+        let (mut app, _) = App::new();
+        for c in "uno dos".chars() {
+            type_char(&mut app, c);
+        }
+        let _ = app.update(Message::Edit(Action::Edit(Edit::Enter)));
+        type_char(&mut app, 'ñ');
+        let stats = app.stats();
+        assert_eq!((stats.line, stats.col, stats.words), (2, 2, 3));
     }
 
     #[test]

@@ -60,11 +60,11 @@
 - [x] AC3 Deshacer hasta guardado limpia indicador 🧪 — `app::tests::returning_to_saved_state_clears_indicator`
 
 ### US-1.3 Editor
-- [ ] AC1 Fuente monoespaciada 👁
-- [ ] AC2 Resaltado Markdown 👁
-- [ ] AC3 Deshacer/rehacer 👁
-- [ ] AC4 Tab/Shift+Tab 👁
-- [ ] AC5 Barra de estado (línea:col, palabras, EOL, codificación) 🧪 conteo + 👁
+- [x] AC1 Fuente monoespaciada 👁
+- [x] AC2 Resaltado Markdown 👁
+- [x] AC3 Deshacer/rehacer 👁
+- [x] AC4 Tab/Shift+Tab 👁
+- [x] AC5 Barra de estado (línea:col, palabras, EOL, codificación) 🧪 conteo + 👁
 
 ### US-1.4 Vista previa
 - [ ] AC1 Debounce ≤ 150 ms 👁

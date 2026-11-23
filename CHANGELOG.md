@@ -11,6 +11,10 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 ## [Unreleased]
 
 ### Added
+- Editor con fuente monoespaciada y resaltado de sintaxis Markdown [US-1.3]
+- Deshacer y rehacer (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl+Y en Windows/Linux) [US-1.3]
+- Tab y Shift+Tab para indentar y desindentar [US-1.3]
+- Barra de estado con línea:columna, conteo de palabras, final de línea y codificación [US-1.3]
 - Indicador `●` en el título cuando hay cambios sin guardar [US-1.2]
 - Diálogo Guardar / Descartar / Cancelar al cerrar la ventana, o al usar Nuevo y Abrir, con cambios pendientes [US-1.2]
 - Nuevo, Abrir, Guardar y Guardar como (Ctrl/Cmd+N, O, S, Shift+S) con diálogos nativos [US-1.1]

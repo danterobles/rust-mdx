@@ -1,8 +1,10 @@
 //! Punto de entrada de Mdx.
 
 mod app;
+mod editor;
 mod layout;
 mod shortcuts;
+mod statusbar;
 mod strings;
 
 use anyhow::Result;
