@@ -117,8 +117,8 @@
 - [x] AC3 Extracción con snapshots 🧪 — `outline::tests::*` (snapshot `insta`), `app::tests::outline_is_empty_until_the_debounced_parse_arrives`, `outline_keeps_updating_when_the_preview_is_hidden`
 
 ### US-3.3 Scroll sincronizado
-- [~] AC1 Sincronía editor→preview 👁 (🧪 `preview_sync::tests::*`, `editor::tests::probe_*`, `outline::tests::top_level_blocks_*`, `app::tests::source_blocks_match_*`, `scrolling_the_editor_tracks_*`; verificación visual pendiente)
-- [~] AC2 Toggle 👁 (🧪 `app::tests::sync_toggle_defaults_to_on_and_can_be_turned_off`; casilla en la cabecera de la vista previa; verificación visual pendiente)
+- [x] AC1 Sincronía editor→preview 👁
+- [x] AC2 Toggle 👁
 
 ### US-3.4 Buscar y reemplazar
 - [ ] AC1 Buscar / reemplazar en documento 🧪 + 👁
