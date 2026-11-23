@@ -78,6 +78,7 @@ flowchart LR
 mdx-app/src/
 ├── main.rs          # init de tracing, parseo CLI, arranque iced
 ├── app.rs           # State, Message, update, view, subscription (orquestador)
+├── layout.rs        # disposición del pane_grid (20/40/40), lógica pura
 ├── state/
 │   ├── tabs.rs      # lógica pura de pestañas (testeable)
 │   └── editors.rs   # HashMap<DocumentId, text_editor::Content>

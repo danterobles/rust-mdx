@@ -36,10 +36,10 @@
 - [x] AC4 `cargo deny check` configurado 🧪
 
 ### US-0.2 Ventana base
-- [ ] AC1 Ventana "Mdx" abre 👁
-- [ ] AC2 Layout 3 paneles 20/40/40 👁
-- [ ] AC3 Divisores arrastrables 👁
-- [ ] AC4 Barra de estado visible 👁
+- [~] AC1 Ventana "Mdx" abre 👁 (proceso arranca y crea la ventana; confirmación visual pendiente)
+- [~] AC2 Layout 3 paneles 20/40/40 👁 (🧪 `layout::tests::initial_layout_is_20_40_40`; confirmación visual pendiente)
+- [~] AC3 Divisores arrastrables 👁 (🧪 `layout::tests::dividers_can_be_resized`; arrastre con ratón pendiente de confirmar)
+- [~] AC4 Barra de estado visible 👁 (confirmación visual pendiente)
 
 - [ ] **Hito F0**: CI verde en 3 SO y ventana con layout
 
