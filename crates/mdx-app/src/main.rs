@@ -10,6 +10,7 @@ mod explorer;
 mod layout;
 mod outline;
 mod preview_sync;
+mod preview_virtual;
 mod search;
 mod shortcuts;
 mod state;

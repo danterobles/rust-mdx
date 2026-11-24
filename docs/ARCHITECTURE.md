@@ -100,6 +100,7 @@ mdx-app/src/
 ├── outline.rs       # panel «Esquema» (encabezados del documento activo)
 ├── search.rs        # barra buscar/reemplazar y panel de búsqueda en carpeta
 ├── preview_sync.rs  # medición de bloques de la preview y mapeo línea → desplazamiento
+├── preview_virtual.rs # ventana de bloques visibles y alturas (virtualización, ADR 0009)
 ├── statusbar.rs     # texto de la barra de estado (línea:col, palabras, EOL, codificación)
 ├── state/
 │   ├── tabs.rs      # lógica pura de pestañas (testeable); en US-2.2 solo el modelo

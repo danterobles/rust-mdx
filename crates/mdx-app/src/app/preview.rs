@@ -32,7 +32,8 @@ impl App {
                 });
                 // Nuevo contenido renderizado: se mide de nuevo (solo la pestaña activa).
                 if id == self.doc.id {
-                    self.measure_preview()
+                    let reset = self.reset_virtual(false);
+                    Task::batch([reset, self.measure_preview()])
                 } else {
                     Task::none()
                 }
@@ -40,6 +41,9 @@ impl App {
             Message::PreviewMeasured(id, layout) => {
                 if id != self.doc.id {
                     return Task::none();
+                }
+                if self.is_virtual() {
+                    return self.on_measured_virtual(&layout);
                 }
                 self.preview_layout = layout;
                 self.sync_now()
@@ -56,6 +60,10 @@ impl App {
                     Task::none()
                 }
             }
+            Message::PreviewScrolled {
+                scroll_y,
+                viewport_h,
+            } => self.on_preview_scrolled(scroll_y, viewport_h),
             Message::ExportHtml => self.export_html(),
             Message::HtmlExportPicked(Some((path, text, title))) => Task::perform(
                 async move {

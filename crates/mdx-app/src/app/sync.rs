@@ -8,7 +8,14 @@ impl App {
     /// Mide dónde quedó cada bloque renderizado de la vista previa. El resultado llega como
     /// `PreviewMeasured` y desencadena la sincronización.
     pub(super) fn measure_preview(&self) -> Task<Message> {
-        if self.sync == SyncScroll::Off || !self.preview_visible || self.preview.is_empty() {
+        if !self.preview_visible || self.preview.is_empty() {
+            return Task::none();
+        }
+        if self.is_virtual() {
+            // La virtualización necesita las medidas aunque el scroll sincronizado esté apagado.
+            return self.measure_virtual();
+        }
+        if self.sync == SyncScroll::Off {
             return Task::none();
         }
         let id = self.doc.id;
@@ -18,7 +25,7 @@ impl App {
 
     /// Desplaza la vista previa hasta el bloque que corresponde a la primera línea visible del
     /// editor.
-    pub(super) fn sync_now(&self) -> Task<Message> {
+    pub(super) fn sync_now(&mut self) -> Task<Message> {
         if self.sync == SyncScroll::Off || !self.preview_visible {
             return Task::none();
         }
@@ -33,13 +40,18 @@ impl App {
         ) else {
             return Task::none();
         };
-        iced::widget::operation::scroll_to(
+        let jump = iced::widget::operation::scroll_to(
             iced::widget::Id::new(preview_sync::SCROLL_ID),
             scrollable::AbsoluteOffset {
                 x: None,
                 y: Some(y),
             },
-        )
+        );
+        if self.is_virtual() {
+            // Ver `virtual_jump_to`: dibujar la ventana del destino antes de llegar a él.
+            return Task::batch([jump, self.virtual_jump_to(y)]);
+        }
+        jump
     }
 
     /// Lee la primera fila visible del editor y sincroniza la vista previa con ella.

@@ -46,8 +46,11 @@ impl App {
             strings::STATUS_ZOOM.replace("{percent}", &percent.to_string()),
             false,
         );
-        // El texto de la vista previa cambia de tamaño: se vuelve a medir para el scroll.
-        self.measure_preview()
+        // El texto de la vista previa cambia de tamaño: se re-estiman las alturas y se vuelve a
+        // medir (scroll sincronizado y vista previa virtualizada).
+        self.vp.heights.clear();
+        let reset = self.reset_virtual(false);
+        Task::batch([reset, self.measure_preview()])
     }
 }
 

@@ -1253,6 +1253,7 @@ fn measured_layout_is_kept_only_for_the_active_document_and_reset_on_tab_switch(
         tops: vec![0.0],
         content_height: 100.0,
         viewport_height: 50.0,
+        found: Vec::new(),
     };
     let _ = app.update(Message::PreviewMeasured(a, layout.clone()));
     assert_eq!(app.preview_layout, layout);
@@ -2409,4 +2410,151 @@ fn text_paste_normalises_line_endings_and_ignores_an_empty_clipboard() {
     let _ = app.update(Message::PasteText(None));
     let _ = app.update(Message::PasteText(Some(String::new())));
     assert_eq!(app.content.text(), before);
+}
+
+// ------------------------------------------- NFR-3: vista previa virtualizada
+
+fn long_doc(paragraphs: usize) -> String {
+    use std::fmt::Write;
+    let mut text = String::new();
+    for i in 0..paragraphs {
+        let _ = write!(text, "Párrafo número {i} con algo de texto.\n\n");
+    }
+    text
+}
+
+fn open_long(app: &mut App, paragraphs: usize) -> DocumentId {
+    let id = open_pinned_doc(app, &format!("largo{paragraphs}.md"), &long_doc(paragraphs));
+    deliver_preview(app);
+    id
+}
+
+#[test]
+fn short_documents_are_not_virtualized_and_long_ones_are() {
+    let (mut app, _) = App::new(None);
+    open_long(&mut app, 20);
+    assert!(!app.is_virtual());
+    open_long(&mut app, 400);
+    assert!(app.is_virtual());
+    assert_eq!(app.preview.len(), 400);
+}
+
+#[test]
+fn a_virtualized_preview_only_builds_a_window_of_blocks() {
+    let (mut app, _) = App::new(None);
+    open_long(&mut app, 600);
+    let range = app.vp.range.clone();
+    assert_eq!(range.start, 0);
+    assert!(range.end < 120, "ventana de bloques, no los 600: {range:?}");
+    assert_eq!(app.vp.heights.len(), 600);
+    let (before, after) = app.vp.spacers();
+    assert!(
+        before.abs() < f32::EPSILON && after > 0.0,
+        "{before} {after}"
+    );
+}
+
+#[test]
+fn scrolling_moves_the_window_and_the_spacers() {
+    let (mut app, _) = App::new(None);
+    open_long(&mut app, 600);
+    let total: f32 = app.vp.heights.iter().sum();
+    let _ = app.update(Message::PreviewScrolled {
+        scroll_y: total / 2.0,
+        viewport_h: 800.0,
+    });
+    let mid = app.vp.range.clone();
+    assert!(mid.start > 100 && mid.end < 500, "{mid:?}");
+    let (before, after) = app.vp.spacers();
+    assert!(before > 0.0 && after > 0.0);
+    // Al final.
+    let _ = app.update(Message::PreviewScrolled {
+        scroll_y: total,
+        viewport_h: 800.0,
+    });
+    assert_eq!(app.vp.range.end, 600);
+    // Volver arriba.
+    let _ = app.update(Message::PreviewScrolled {
+        scroll_y: 0.0,
+        viewport_h: 800.0,
+    });
+    assert_eq!(app.vp.range.start, 0);
+}
+
+#[test]
+fn measured_heights_replace_estimates_and_the_scroll_is_compensated() {
+    let (mut app, _) = App::new(None);
+    let id = open_long(&mut app, 600);
+    let _ = app.update(Message::PreviewScrolled {
+        scroll_y: 5000.0,
+        viewport_h: 800.0,
+    });
+    let range = app.vp.range.clone();
+    // Los bloques de la ventana miden 30 px (la estimación era distinta).
+    let mut found: Vec<Option<f32>> = vec![None; 601];
+    let base = app.vp.spacers().0;
+    for (n, i) in (range.start..=range.end).enumerate() {
+        #[allow(clippy::cast_precision_loss)]
+        let offset = 30.0 * n as f32;
+        found[i] = Some(base + offset);
+    }
+    let layout = preview_sync::Layout {
+        tops: Vec::new(),
+        content_height: 0.0,
+        viewport_height: 800.0,
+        found,
+    };
+    let before = app.vp.heights[range.start];
+    let _ = app.update(Message::PreviewMeasured(id, layout));
+    assert!((app.vp.heights[range.start] - 30.0).abs() < 1e-3);
+    assert!((before - 30.0).abs() > 1.0, "la estimación era distinta");
+    // El diseño del scroll sincronizado se reconstruye con las alturas conocidas.
+    assert_eq!(app.preview_layout.tops.len(), 600);
+}
+
+#[test]
+fn switching_tabs_resets_the_virtual_window_to_the_top() {
+    let (mut app, _) = App::new(None);
+    let a = open_long(&mut app, 600);
+    let _ = app.update(Message::PreviewScrolled {
+        scroll_y: 8000.0,
+        viewport_h: 800.0,
+    });
+    assert!(app.vp.range.start > 0);
+    let _ = open_pinned_doc(&mut app, "corto.md", "uno");
+    deliver_preview(&mut app);
+    assert!(!app.is_virtual());
+    let _ = app.update(Message::SelectTab(a));
+    assert!(app.is_virtual());
+    assert_eq!(app.vp.range.start, 0);
+    assert!(app.vp.scroll_y.abs() < f32::EPSILON);
+}
+
+#[test]
+fn hiding_the_preview_or_zooming_keeps_the_state_consistent() {
+    let (mut app, _) = App::new(None);
+    open_long(&mut app, 600);
+    let h_before = app.vp.heights[0];
+    let _ = app.update(Message::Shortcut(ShortcutAction::ZoomIn));
+    let _ = app.update(Message::Shortcut(ShortcutAction::ZoomIn));
+    assert!(
+        app.vp.heights[0] > h_before,
+        "con más zoom las estimaciones crecen"
+    );
+    let _ = app.update(Message::Shortcut(ShortcutAction::TogglePreview));
+    assert!(!app.is_virtual(), "oculta: no hay nada que virtualizar");
+    let _ = app.update(Message::PreviewScrolled {
+        scroll_y: 100.0,
+        viewport_h: 500.0,
+    });
+}
+
+#[test]
+fn scroll_sync_in_a_virtualized_preview_moves_the_window_to_the_target() {
+    let (mut app, _) = App::new(None);
+    open_long(&mut app, 600);
+    // El editor muestra la línea 800 (≈ bloque 400): la sincronización lleva la ventana allí.
+    app.view_top = (800, 0.0);
+    let _ = app.sync_now();
+    assert!(app.vp.range.start > 200, "{:?}", app.vp.range);
 }

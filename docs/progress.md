@@ -340,3 +340,9 @@ Decisiones y límites:
 - Decisiones del propietario: nombre **RustMDX**, bundle ID `mx.doitconsulting.mdx` (el propuesto por el PRD), ícono provisional generado (PRD §12 preguntas 1 resuelta).
 - Ícono: «M» blanca sobre cuadrado redondeado con degradado naranja óxido. Fuente `assets/icons/rustmdx.svg`; derivados `rustmdx-1024.png`, `png/rustmdx-{16,32,48,64,128,256,512}.png`, `rustmdx.ico` (6 tamaños) y `rustmdx.icns` (con @2x), generados con ImageMagick e `iconutil`. Se usa también como ícono de la ventana (`include_bytes!` del PNG de 256 px).
 - Se cambia `APP_TITLE` («RustMDX») y los títulos que muestran las pruebas; el ejecutable sigue siendo `mdx` y los directorios de configuración/estado conservan `mx.doitconsulting.mdx` (no se pierde la configuración existente).
+
+## NFR-3 — virtualización de la vista previa (rama perf/virtualizar-vista-previa)
+Plan: `preview_virtual.rs` (funciones puras, 8 tests), `app/virtualize.rs` (estado `VirtualPreview`, medición por rango, compensación de scroll), `preview_pane` con espaciadores, `Layout.found`.
+- 🧪 7 tests de app (ventana acotada, scroll mueve ventana, medidas reemplazan estimaciones, cambio de pestaña, zoom/ocultar, scroll sincronizado salta ventana).
+- 👁 Medición `footprint` (release, sesión vacía): archivo pequeño 91 MB, 100 KB 135 MB (antes 82/176). **NFR-3 sigue sin cumplirse (<80 MB).**
+- 👁 Pendiente del usuario: comprobar visualmente que el desplazamiento de la vista previa en un documento largo no salta y que el scroll sincronizado sigue bien.

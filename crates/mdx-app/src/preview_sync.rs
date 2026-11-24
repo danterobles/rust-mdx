@@ -29,6 +29,9 @@ pub struct Layout {
     pub content_height: f32,
     /// Altura visible del `scrollable`.
     pub viewport_height: f32,
+    /// Posición medida del inicio de cada bloque (`None` si ese bloque no se dibujó). En la vista
+    /// previa virtualizada solo están los de la ventana y el espaciador inferior.
+    pub found: Vec<Option<f32>>,
 }
 
 /// Recorre el árbol de widgets y mide los contenedores de bloque.
@@ -42,13 +45,23 @@ pub struct Measure {
 }
 
 impl Measure {
+    /// Mide los `blocks` bloques de la vista previa.
     #[must_use]
     pub fn new(blocks: usize) -> Self {
+        Self::for_range(blocks, 0..blocks)
+    }
+
+    /// Mide solo los bloques de `range` (y el que sigue: el espaciador inferior de la vista
+    /// virtualizada), dentro de un documento de `blocks` bloques.
+    #[must_use]
+    pub fn for_range(blocks: usize, range: std::ops::Range<usize>) -> Self {
         Self {
-            ids: (0..blocks).map(|i| (block_id(i), i)).collect(),
+            ids: (range.start..=range.end.min(blocks))
+                .map(|i| (block_id(i), i))
+                .collect(),
             scroll_id: Id::from(SCROLL_ID),
             origin_y: None,
-            tops: vec![None; blocks],
+            tops: vec![None; blocks + 1],
             content_height: 0.0,
             viewport_height: 0.0,
         }
@@ -83,10 +96,12 @@ impl Operation<Layout> for Measure {
 
     fn finish(&self) -> Outcome<Layout> {
         let origin = self.origin_y.unwrap_or(0.0);
+        let found: Vec<Option<f32>> = self.tops.iter().map(|t| t.map(|y| y - origin)).collect();
         let mut last = 0.0_f32;
         let tops = self
             .tops
             .iter()
+            .take(self.tops.len().saturating_sub(1))
             .map(|t| {
                 // Un bloque que no se llegó a medir hereda la posición del anterior.
                 last = t.map_or(last, |y| y - origin);
@@ -97,6 +112,7 @@ impl Operation<Layout> for Measure {
             tops,
             content_height: self.content_height,
             viewport_height: self.viewport_height,
+            found,
         })
     }
 }
@@ -169,6 +185,7 @@ mod tests {
                 tops: vec![0.0, 120.0, 440.0],
                 content_height: 540.0,
                 viewport_height: 200.0,
+                found: Vec::new(),
             },
         )
     }
@@ -230,6 +247,7 @@ mod tests {
             tops: vec![0.0],
             content_height: 100.0,
             viewport_height: 400.0,
+            found: Vec::new(),
         };
         assert_eq!(
             target_offset(&[block(0, 3)], &unscrollable, 3, 2, 0.0),
