@@ -335,3 +335,8 @@ Decisiones y límites:
 - Run 45295816044: `cargo deny`, ubuntu, macOS y windows **en verde** → AC2 de US-0.1 en `[x]`.
 - Tags anotados `v0.2.0`, `v0.3.0`, `v0.4.0` y `v0.5.0` creados sobre sus commits `chore(release)` y subidos (no existe `v0.1.0`: la F0 se absorbió en la 0.2.0). No hay workflow de release todavía, así que no se disparó ninguno.
 - Licencia MIT y URL del repositorio aplicadas.
+
+## Identidad del producto (2026-11-23)
+- Decisiones del propietario: nombre **RustMDX**, bundle ID `mx.doitconsulting.mdx` (el propuesto por el PRD), ícono provisional generado (PRD §12 preguntas 1 resuelta).
+- Ícono: «M» blanca sobre cuadrado redondeado con degradado naranja óxido. Fuente `assets/icons/rustmdx.svg`; derivados `rustmdx-1024.png`, `png/rustmdx-{16,32,48,64,128,256,512}.png`, `rustmdx.ico` (6 tamaños) y `rustmdx.icns` (con @2x), generados con ImageMagick e `iconutil`. Se usa también como ícono de la ventana (`include_bytes!` del PNG de 256 px).
+- Se cambia `APP_TITLE` («RustMDX») y los títulos que muestran las pruebas; el ejecutable sigue siendo `mdx` y los directorios de configuración/estado conservan `mx.doitconsulting.mdx` (no se pierde la configuración existente).

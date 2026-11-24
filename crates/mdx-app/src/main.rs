@@ -24,7 +24,7 @@ fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .init();
-    tracing::info!(version = mdx_core::version(), "Mdx iniciado");
+    tracing::info!(version = mdx_core::version(), "RustMDX iniciado");
 
     // `mdx <ruta>`: carpeta (workspace) o archivo.
     let arg = std::env::args_os().nth(1).map(std::path::PathBuf::from);
@@ -37,7 +37,17 @@ fn main() -> Result<()> {
     .theme(app::App::theme)
     .subscription(app::App::subscription)
     .exit_on_close_request(false)
-    .window_size((1200.0, 750.0))
+    .window(iced::window::Settings {
+        size: iced::Size::new(1200.0, 750.0),
+        icon: window_icon(),
+        ..iced::window::Settings::default()
+    })
     .run()?;
     Ok(())
+}
+
+/// Ícono de la ventana (el de los instaladores está en `assets/icons/`).
+fn window_icon() -> Option<iced::window::Icon> {
+    const ICON: &[u8] = include_bytes!("../../../assets/icons/png/rustmdx-256.png");
+    iced::window::icon::from_file_data(ICON, None).ok()
 }

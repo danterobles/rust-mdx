@@ -1,6 +1,6 @@
 //! Textos de UI (español). Único lugar con literales visibles para el usuario (NFR-8).
 
-pub const APP_TITLE: &str = "Mdx";
+pub const APP_TITLE: &str = "RustMDX";
 pub const UNTITLED: &str = "Sin título";
 
 pub const FILTER_MARKDOWN: &str = "Markdown y texto";
