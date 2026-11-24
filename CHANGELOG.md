@@ -10,6 +10,9 @@ Cada entrada termina con la referencia a la historia del PRD, p. ej. `[US-1.1]`.
 
 ## [Unreleased]
 
+### Added
+- Instaladores (`.dmg` universal, `.msi`, `.AppImage`, `.deb`) con ícono y asociación de archivos `.md`/`.markdown`, publicados por GitHub Actions al crear un tag [US-5.1]
+
 ### Changed
 - Vista previa virtualizada en documentos largos: menor uso de memoria (100 KB: 176 → 135 MB) [NFR-3]
 - El producto se llama ahora **RustMDX** (título de la ventana, ícono propio provisional y documentación) [US-5.1]

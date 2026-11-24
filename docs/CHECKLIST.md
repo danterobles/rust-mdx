@@ -161,13 +161,13 @@
 ## Fase 5 — Distribución → v1.0.0
 
 ### US-5.1 Paquetes
-- [ ] AC1 MSI / DMG universal / AppImage / DEB 🧪 (CI)
-- [ ] AC2 Workflow de release por tag 🧪
-- [ ] AC3 Asociación de `.md` 👁
-- [ ] AC4 Ícono en 3 SO 👁
+- [~] AC1 MSI / DMG universal / AppImage / DEB 🧪 (CI) — `.dmg` (arm64) generado localmente; `.msi`, `.deb`, `.AppImage` y el universal solo se ejercitan al publicar un tag (release.yml)
+- [~] AC2 Workflow de release por tag 🧪 — `release.yml` escrito; sin ejecutar hasta el primer tag (la extracción de notas del CHANGELOG sí se probó)
+- [~] AC3 Asociación de `.md` 👁 — verificada en el `Info.plist` del `.app`; en macOS «Abrir con» no entrega la ruta (winit 0.30), ver docs/release.md §3
+- [~] AC4 Ícono en 3 SO 👁 — `.icns` en el bundle de macOS y ícono de ventana; `.ico`/PNG configurados para Windows/Linux (por verificar)
 
 ### US-5.2 Firma
-- [ ] AC1 Documentado y parametrizado por secrets 👁
+- [x] AC1 Documentado y parametrizado por secrets 👁 — `docs/release.md` §2 y `release.yml` (sin credenciales en el repo)
 
 - [ ] **Hito F5**: instaladores probados en Windows, macOS y Linux 👁
 

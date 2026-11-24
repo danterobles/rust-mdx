@@ -1,0 +1,38 @@
+# Configuración de cargo-packager (US-5.1). Uso: `cargo packager --release`.
+# Los formatos se eligen por plataforma con `--formats` (ver docs/release.md y release.yml).
+name = "mdx"
+product-name = "RustMDX"
+version = "0.5.0"
+identifier = "mx.doitconsulting.mdx"
+description = "Editor de Markdown de escritorio, ligero y multiplataforma"
+long-description = "RustMDX: explorador de archivos, editor y vista previa en vivo de Markdown, 100 % Rust."
+authors = ["danterobles"]
+homepage = "https://github.com/danterobles/rust-mdx"
+license-file = "LICENSE"
+category = "DeveloperTool"
+out-dir = "target/packager"
+binaries-dir = "target/release"
+before-packaging-command = "cargo build --release -p mdx-app"
+icons = [
+    "assets/icons/png/rustmdx-32.png",
+    "assets/icons/png/rustmdx-128.png",
+    "assets/icons/png/rustmdx-256.png",
+    "assets/icons/png/rustmdx-512.png",
+    "assets/icons/rustmdx.icns",
+    "assets/icons/rustmdx.ico",
+]
+
+[[binaries]]
+path = "mdx"
+main = true
+
+# AC3: asociación de archivos Markdown.
+[[file-associations]]
+extensions = ["md", "markdown"]
+mime-type = "text/markdown"
+description = "Documento Markdown"
+name = "Markdown"
+role = "editor"
+
+[dmg]
+window-size = { width = 600, height = 400 }

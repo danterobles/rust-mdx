@@ -101,6 +101,7 @@ Reglas:
 
 ### 4.3 Versionado — SemVer 2.0
 - **Única fuente de versión**: `[workspace.package] version` en el `Cargo.toml` raíz. Los crates heredan con `version.workspace = true`.
+- `Packager.toml` repite la versión (cargo-packager no la hereda del workspace): al subir versión, actualiza **ambos** archivos; `release.yml` verifica que coincidan con el tag.
 - Antes de 1.0, cada **fase cerrada** sube la versión menor:
 
 | Fase cerrada | Versión |
@@ -121,7 +122,7 @@ Reglas:
 1. Verificar que todas las historias de la fase estén `[x]` (o `[~]`/`[-]` justificados) en `CHECKLIST.md`.
 2. Verificar el **Hito** de la fase y los NFR que correspondan (F1, F3, F5) registrando valores medidos.
 3. En `CHANGELOG.md`: renombrar `## [Unreleased]` a `## [X.Y.Z] - AAAA-MM-DD`, crear un `## [Unreleased]` vacío arriba y actualizar los enlaces de comparación al pie.
-4. Subir `version` en `[workspace.package]`; correr `cargo build` para actualizar `Cargo.lock`.
+4. Subir `version` en `[workspace.package]` y en `Packager.toml`; correr `cargo build` para actualizar `Cargo.lock`.
 5. Commit: `chore(release): vX.Y.Z`.
 6. Merge a `main`. Preguntar al usuario si desea crear el tag.
 7. Resumen al usuario: historias completadas, AC con observación, NFR medidos, siguiente fase.
