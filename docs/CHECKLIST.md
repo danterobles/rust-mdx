@@ -31,7 +31,7 @@
 
 ### US-0.1 Workspace y CI
 - [x] AC1 `cargo build` y `cargo test` pasan 🧪
-- [~] AC2 CI en ubuntu/macos/windows 🧪 (workflow escrito; verificación pendiente del primer push, ver progress.md)
+- [x] AC2 CI en ubuntu/macos/windows 🧪 — GitHub Actions, run 45295816044 en `main` (2026-11-24): `fmt`, `clippy`, `test` y `cargo deny` en verde en ubuntu, macOS y windows
 - [x] AC3 clippy sin warnings 🧪
 - [x] AC4 `cargo deny check` configurado 🧪
 
