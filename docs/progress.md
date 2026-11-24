@@ -346,3 +346,10 @@ Plan: `preview_virtual.rs` (funciones puras, 8 tests), `app/virtualize.rs` (esta
 - 🧪 7 tests de app (ventana acotada, scroll mueve ventana, medidas reemplazan estimaciones, cambio de pestaña, zoom/ocultar, scroll sincronizado salta ventana).
 - 👁 Medición `footprint` (release, sesión vacía): archivo pequeño 91 MB, 100 KB 135 MB (antes 82/176). **NFR-3 sigue sin cumplirse (<80 MB).**
 - 👁 Pendiente del usuario: comprobar visualmente que el desplazamiento de la vista previa en un documento largo no salta y que el scroll sincronizado sigue bien.
+
+## US-5.1 Paquetes / US-5.2 Firma — 🟡 en curso (rama feat/us-5.1-paquetes)
+Plan: `Packager.toml` (cargo-packager 0.11.8), `.github/workflows/release.yml`, `docs/release.md`.
+- AC1 ~ `cargo packager --release --formats dmg` genera `RustMDX_0.5.0_aarch64.dmg` (7,2 MB) en macOS arm64. Universal, msi, deb y AppImage solo en CI al publicar tag.
+- AC3 ~ `Info.plist` del `.app` incluye `md`/`markdown`, id `mx.doitconsulting.mdx`, `CFBundleIconFile`. Limitación: en macOS no llega la ruta (winit).
+- Decisión: la versión vive en `Cargo.toml` y `Packager.toml`; `release.yml` verifica que coincidan con el tag. Pendiente: CLAUDE.md §5 menciona solo Cargo.toml.
+- Notas: `Packager.toml` en la raíz es autodetectado; `role` debe ir en minúsculas.

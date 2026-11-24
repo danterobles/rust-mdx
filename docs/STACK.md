@@ -139,6 +139,8 @@ Dependencias de sistema en Linux CI: `libxkbcommon-dev`, `libwayland-dev`, `libg
 | macOS 13+ | `.dmg` (universal) | x86_64 + aarch64 |
 | Linux | `.AppImage`, `.deb` | x86_64 |
 
+Configuración: `Packager.toml` (cargo-packager 0.11.8; su `version` debe igualar la de `Cargo.toml`, lo verifica `release.yml`). Publicación y firma: `docs/release.md`.
+
 Identificador: `mx.doitconsulting.mdx` (confirmado, PRD §12). Nombre del producto: **RustMDX**. Íconos (provisionales) en `assets/icons/`: `rustmdx.svg` (diseño), `rustmdx-1024.png`, `png/rustmdx-{16…512}.png`, `rustmdx.ico` y `rustmdx.icns`.
 
 ## 8. Política de licencias (`deny.toml`)
