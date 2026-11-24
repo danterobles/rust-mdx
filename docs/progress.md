@@ -329,3 +329,9 @@ Decisiones y límites:
 ## Licencia y repositorio (2026-11-23)
 - Decisión del propietario: licencia **MIT**; repositorio <https://github.com/danterobles/rust-mdx> (remoto `origin` ya configurado por SSH). `Cargo.toml` (`[workspace.package]`), STACK §5, PRD §12 (pregunta 2 resuelta), `LICENSE`, README y enlaces de comparación del CHANGELOG actualizados. El titular del copyright en `LICENSE` es `danterobles` (modificable).
 - Tags y `push`: sin realizar (requieren autorización explícita).
+
+## CI remoto verificado (2026-11-24)
+- Primer `push` de `main` (con autorización del propietario): el run 45293143930 falló solo en **windows-latest** por dos pruebas de `mdx-core` con supuestos de rutas Unix (`/abs/a.png` no es absoluta en Windows; separador `\` en una comparación). Corregidas en `fix/tests-windows` (código de producción sin cambios).
+- Run 45295816044: `cargo deny`, ubuntu, macOS y windows **en verde** → AC2 de US-0.1 en `[x]`.
+- Tags anotados `v0.2.0`, `v0.3.0`, `v0.4.0` y `v0.5.0` creados sobre sus commits `chore(release)` y subidos (no existe `v0.1.0`: la F0 se absorbió en la 0.2.0). No hay workflow de release todavía, así que no se disparó ninguno.
+- Licencia MIT y URL del repositorio aplicadas.
