@@ -410,11 +410,9 @@ mod tests {
         r.matches
             .iter()
             .map(|m| {
-                format!(
-                    "{}:{}",
-                    m.path.strip_prefix(root).unwrap().display(),
-                    m.line
-                )
+                // Separador `/` en todas las plataformas para poder comparar.
+                let rel = m.path.strip_prefix(root).unwrap().display().to_string();
+                format!("{}:{}", rel.replace('\\', "/"), m.line)
             })
             .collect()
     }

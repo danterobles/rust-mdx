@@ -250,7 +250,13 @@ mod tests {
         }
         // Sin directorio base (documento sin guardar) no se puede resolver una ruta relativa.
         assert_eq!(resolve_image("a.png", None), None);
-        assert!(resolve_image("/abs/a.png", None).is_some());
+        // Una ruta absoluta no necesita directorio base (en Windows lleva letra de unidad).
+        let absolute = if cfg!(windows) {
+            r"C:\abs\a.png"
+        } else {
+            "/abs/a.png"
+        };
+        assert!(resolve_image(absolute, None).is_some());
     }
 
     #[test]
