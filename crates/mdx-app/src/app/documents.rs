@@ -175,7 +175,10 @@ impl App {
         // Las medidas de la vista previa eran del documento anterior: se vuelve a medir.
         self.preview_layout = Layout::default();
         self.refresh_find_matches();
-        self.measure_preview()
+        // Vista previa virtualizada: cada documento empieza arriba con alturas nuevas.
+        self.vp.heights.clear();
+        let to_top = self.reset_virtual(true);
+        Task::batch([to_top, self.measure_preview()])
     }
 
     pub(super) fn cycle_tab(&mut self, delta: isize) -> Task<Message> {
@@ -254,7 +257,9 @@ impl App {
             self.put_active(next);
             self.preview_layout = Layout::default();
             self.refresh_find_matches();
-            return self.measure_preview();
+            self.vp.heights.clear();
+            let to_top = self.reset_virtual(true);
+            return Task::batch([to_top, self.measure_preview()]);
         }
         let doc = Document::untitled();
         self.tabs.open_pinned(doc.id);

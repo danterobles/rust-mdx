@@ -11,6 +11,7 @@ mod session_ops;
 mod sync;
 #[cfg(test)]
 mod tests;
+mod virtualize;
 mod zoom;
 
 use documents::Parked;
@@ -58,6 +59,7 @@ use crate::state::tabs::Tabs;
 use crate::statusbar::{Stats, display_col};
 use crate::strings;
 use crate::theme;
+use virtualize::VirtualPreview;
 use zoom::ZoomChange;
 
 /// Visor de Markdown de la vista previa: convierte los enlaces en mensajes y dibuja las
@@ -134,6 +136,8 @@ pub struct App {
     blocks: Vec<Block>,
     /// Primera fila visible del editor: (línea, fracción de esa línea).
     view_top: (usize, f32),
+    /// Estado de la vista previa virtualizada (documentos largos).
+    vp: VirtualPreview,
     /// Posición de los bloques ya renderizados en la vista previa del documento activo.
     preview_layout: Layout,
     /// Scroll sincronizado editor → vista previa (US-3.3 AC2).
@@ -302,6 +306,7 @@ pub enum Message {
     ResolveConflict(ConflictChoice),
     PreviewParsed(DocumentId, u64, Parsed),
     PreviewMeasured(DocumentId, Layout),
+    PreviewScrolled { scroll_y: f32, viewport_h: f32 },
     SetSyncScroll(bool),
     ExportHtml,
     PasteRequested,
@@ -400,6 +405,7 @@ impl App {
                 unavailable_images: std::collections::HashSet::new(),
                 blocks: Vec::new(),
                 view_top: (0, 0.0),
+                vp: VirtualPreview::default(),
                 preview_layout: Layout::default(),
                 sync: SyncScroll::On,
                 tabs,
@@ -562,6 +568,7 @@ impl App {
             m @ (Message::PreviewTick(_)
             | Message::PreviewParsed(..)
             | Message::PreviewMeasured(..)
+            | Message::PreviewScrolled { .. }
             | Message::SetSyncScroll(_)
             | Message::ExportHtml
             | Message::PasteRequested
@@ -866,14 +873,44 @@ impl App {
                 .map(Path::to_path_buf),
             unavailable: self.unavailable_images.clone(),
         };
-        let blocks = self.preview.iter().enumerate().map(|(i, item)| {
-            container(markdown::item(&viewer, settings, item, i))
-                .id(preview_sync::block_id(i))
+        let column: Element<'_, String> = if self.is_virtual() {
+            // Documento largo: solo la ventana de bloques; el resto, espaciadores.
+            let (before, after) = self.vp.spacers();
+            let spacing = settings.spacing.0;
+            let mut children: Vec<Element<'_, String>> = Vec::new();
+            if before > 0.0 {
+                children.push(iced::widget::space().height(before).into());
+            }
+            for i in self.vp.range.clone() {
+                let Some(item) = self.preview.get(i) else {
+                    break;
+                };
+                // La separación va dentro del bloque: así su altura medida la incluye.
+                children.push(
+                    container(markdown::item(&viewer, settings, item, i))
+                        .padding(iced::Padding::ZERO.bottom(spacing))
+                        .id(preview_sync::block_id(i))
+                        .into(),
+                );
+            }
+            // El espaciador inferior lleva el id del primer bloque no dibujado: su posición es el
+            // final del último bloque dibujado.
+            children.push(
+                container(iced::widget::space().height(after))
+                    .id(preview_sync::block_id(self.vp.range.end))
+                    .into(),
+            );
+            Column::with_children(children).into()
+        } else {
+            let blocks = self.preview.iter().enumerate().map(|(i, item)| {
+                container(markdown::item(&viewer, settings, item, i))
+                    .id(preview_sync::block_id(i))
+                    .into()
+            });
+            Column::with_children(blocks)
+                .spacing(settings.spacing)
                 .into()
-        });
-        let column: Element<'_, String> = Column::with_children(blocks)
-            .spacing(settings.spacing)
-            .into();
+        };
         Column::new()
             .spacing(6)
             .push(
@@ -897,6 +934,10 @@ impl App {
             .push(
                 scrollable(column.map(Message::LinkClicked))
                     .id(iced::widget::Id::new(preview_sync::SCROLL_ID))
+                    .on_scroll(|viewport| Message::PreviewScrolled {
+                        scroll_y: viewport.absolute_offset().y,
+                        viewport_h: viewport.bounds().height,
+                    })
                     .width(Length::Fill)
                     .height(Length::Fill),
             )
