@@ -9,7 +9,7 @@ fn type_char(app: &mut App, c: char) {
 #[test]
 fn starts_clean_and_untitled() {
     let (app, _) = App::new(None);
-    assert_eq!(app.title(), "Sin título — Mdx");
+    assert_eq!(app.title(), "Sin título — RustMDX");
 }
 
 #[test]
@@ -17,7 +17,7 @@ fn editing_marks_dirty_in_title() {
     // AC1
     let (mut app, _) = App::new(None);
     type_char(&mut app, 'a');
-    assert_eq!(app.title(), "● Sin título — Mdx");
+    assert_eq!(app.title(), "● Sin título — RustMDX");
 }
 
 #[test]
@@ -26,7 +26,7 @@ fn returning_to_saved_state_clears_indicator() {
     let (mut app, _) = App::new(None);
     type_char(&mut app, 'a');
     let _ = app.update(Message::Edit(Action::Edit(Edit::Backspace)));
-    assert_eq!(app.title(), "Sin título — Mdx");
+    assert_eq!(app.title(), "Sin título — RustMDX");
 }
 
 #[test]
@@ -39,9 +39,9 @@ fn saved_content_is_clean_and_new_edit_is_dirty_again() {
         mtime: None,
     };
     let _ = app.update(Message::Saved(app.doc.id, Ok(info)));
-    assert_eq!(app.title(), "x.md — Mdx");
+    assert_eq!(app.title(), "x.md — RustMDX");
     type_char(&mut app, 'b');
-    assert_eq!(app.title(), "● x.md — Mdx");
+    assert_eq!(app.title(), "● x.md — RustMDX");
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn discard_closes_the_tab_and_cancel_keeps_it() {
     // Al cerrar la última pestaña queda un «Sin título» vacío.
     assert_eq!(app.content.text(), "");
     assert_ne!(app.doc.id, id);
-    assert_eq!(app.title(), "Sin título — Mdx");
+    assert_eq!(app.title(), "Sin título — RustMDX");
     assert_eq!(app.tabs.tabs().len(), 1);
 }
 
@@ -74,10 +74,10 @@ fn undo_and_redo_typing_burst() {
     }
     let _ = app.update(Message::Shortcut(ShortcutAction::Undo));
     assert_eq!(app.content.text(), "");
-    assert_eq!(app.title(), "Sin título — Mdx");
+    assert_eq!(app.title(), "Sin título — RustMDX");
     let _ = app.update(Message::Shortcut(ShortcutAction::Redo));
     assert_eq!(app.content.text(), "hola");
-    assert_eq!(app.title(), "● Sin título — Mdx");
+    assert_eq!(app.title(), "● Sin título — RustMDX");
 }
 
 #[test]
@@ -339,10 +339,10 @@ fn replace_all_and_undo_work_on_documents_big_enough_to_rebuild_the_editor() {
     let _ = app.update(Message::ReplaceAll);
     assert!(app.content.text().starts_with("1 dos\n1 dos\n"));
     assert_eq!(app.find.notice.as_deref(), Some("20000 reemplazos"));
-    assert_eq!(app.title(), "● a.md — Mdx");
+    assert_eq!(app.title(), "● a.md — RustMDX");
     let _ = app.update(Message::Shortcut(ShortcutAction::Undo));
     assert_eq!(app.content.text(), text);
-    assert_eq!(app.title(), "a.md — Mdx", "volvió al estado guardado");
+    assert_eq!(app.title(), "a.md — RustMDX", "volvió al estado guardado");
     let _ = app.update(Message::Shortcut(ShortcutAction::Redo));
     assert!(app.content.text().starts_with("1 dos\n"));
 }
@@ -622,7 +622,7 @@ fn renaming_the_open_file_updates_its_path() {
     assert!(app.explorer.prompt.is_none());
     assert_eq!(
         app.title(),
-        "● b.md — Mdx",
+        "● b.md — RustMDX",
         "conserva el estado sin guardar"
     );
 }
@@ -692,7 +692,7 @@ fn external_change_on_clean_document_reloads_silently() {
     );
     assert_eq!(app.content.text(), "nuevo desde otra herramienta");
     assert_eq!(app.doc.disk_state, DiskState::InSync);
-    assert_eq!(app.title(), "a.md — Mdx");
+    assert_eq!(app.title(), "a.md — RustMDX");
     assert!(app.external.is_none());
 }
 
@@ -717,7 +717,7 @@ fn conflict_reload_takes_the_disk_version() {
     let _ = app.update(Message::ResolveConflict(ConflictChoice::Reload));
     assert_eq!(app.content.text(), "disco");
     assert_eq!(app.doc.disk_state, DiskState::InSync);
-    assert_eq!(app.title(), "a.md — Mdx");
+    assert_eq!(app.title(), "a.md — RustMDX");
 }
 
 #[test]
@@ -729,7 +729,7 @@ fn conflict_keep_mine_keeps_text_and_stays_dirty() {
     let _ = app.update(Message::ResolveConflict(ConflictChoice::KeepMine));
     assert_eq!(app.content.text(), "Xbase");
     assert_eq!(app.doc.disk_state, DiskState::InSync);
-    assert_eq!(app.title(), "● a.md — Mdx");
+    assert_eq!(app.title(), "● a.md — RustMDX");
     // Un nuevo aviso con el mismo contenido de disco ya no molesta.
     inspect(&mut app, &path, disk_version(&path, "disco"));
     assert_eq!(app.doc.disk_state, DiskState::InSync);
@@ -762,7 +762,7 @@ fn deleted_on_disk_is_marked_and_keeps_content_and_can_be_resaved() {
     let path = open_with(&mut app, "contenido");
     inspect(&mut app, &path, Err(CoreError::NotFound(path.clone())));
     assert_eq!(app.doc.disk_state, DiskState::Deleted);
-    assert_eq!(app.title(), "a.md (eliminado) — Mdx");
+    assert_eq!(app.title(), "a.md (eliminado) — RustMDX");
     assert_eq!(app.content.text(), "contenido");
     // Volver a guardar restituye el archivo y quita la marca.
     let info = SavedInfo {
@@ -771,7 +771,7 @@ fn deleted_on_disk_is_marked_and_keeps_content_and_can_be_resaved() {
         mtime: None,
     };
     let _ = app.update(Message::Saved(app.doc.id, Ok(info)));
-    assert_eq!(app.title(), "a.md — Mdx");
+    assert_eq!(app.title(), "a.md — RustMDX");
 }
 
 #[test]
@@ -861,7 +861,7 @@ fn switching_tabs_preserves_each_documents_state() {
     let _ = app.update(Message::SelectTab(a));
     assert_eq!(app.doc.id, a);
     assert_eq!(app.content.text(), "Xuno");
-    assert_eq!(app.title(), "● a.md — Mdx");
+    assert_eq!(app.title(), "● a.md — RustMDX");
     assert_eq!(app.tabs.active(), Some(a));
     // El historial de deshacer viaja con cada documento.
     let _ = app.update(Message::Shortcut(ShortcutAction::Undo));
@@ -1372,7 +1372,7 @@ fn replace_one_replaces_the_current_match_and_moves_to_the_next() {
     let _ = app.update(Message::ReplaceChanged("1".to_owned()));
     let _ = app.update(Message::ReplaceOne);
     assert_eq!(app.content.text(), "1 dos uno");
-    assert_eq!(app.title(), "● a.md — Mdx");
+    assert_eq!(app.title(), "● a.md — RustMDX");
     assert_eq!(app.find.matches.len(), 1);
     assert_eq!(
         selected_text(&app).as_deref(),
@@ -2282,7 +2282,7 @@ fn zoom_changes_do_not_touch_the_document() {
     open_with(&mut app, "texto");
     let _ = app.update(Message::Shortcut(ShortcutAction::ZoomIn));
     assert_eq!(app.content.text(), "texto");
-    assert_eq!(app.title(), "a.md — Mdx");
+    assert_eq!(app.title(), "a.md — RustMDX");
 }
 
 // ------------------------------------------------------- US-4.3: exportar HTML
@@ -2358,7 +2358,7 @@ fn a_saved_image_is_inserted_as_a_markdown_link_at_the_cursor() {
         app.content.text(),
         "antes ![](assets/20261123-1.png) después"
     );
-    assert_eq!(app.title(), "● a.md — Mdx");
+    assert_eq!(app.title(), "● a.md — RustMDX");
     assert!(
         app.status
             .as_ref()

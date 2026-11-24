@@ -1,4 +1,6 @@
-# Mdx
+# RustMDX
+
+<img src="assets/icons/png/rustmdx-128.png" width="96" align="right" alt="Ícono de RustMDX">
 
 Editor de Markdown de escritorio, ligero y multiplataforma (Windows, macOS, Linux), escrito en Rust con [iced](https://iced.rs).
 

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Ícono provisional de RustMDX: una «M» blanca sobre un cuadrado redondeado en degradado. -->
+  <defs>
+    <linearGradient id="fondo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ec7a43"/>
+      <stop offset="1" stop-color="#b0401a"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="200" ry="200" fill="url(#fondo)"/>
+  <path fill="#ffffff" d="M 232 760 L 232 264 L 340 264 L 512 520 L 684 264 L 792 264 L 792 760 L 692 760 L 692 430 L 540 656 L 484 656 L 332 430 L 332 760 Z"/>
+</svg>
